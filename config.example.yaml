@@ -1,0 +1,56 @@
+# Copy to /mnt/user/appdata/studybuddy/config.yaml and adjust. Anything left out uses the default.
+
+schedule:
+  afternoon: "16:30"            # topic week, Monday to Friday
+  evening: "19:00"              # vocabulary, every day
+  saturday: "11:00"             # review of earlier topic weeks
+  questions_per_batch: 4
+  reminder_after_minutes: 45    # one nudge, then the parents are told
+  test_day: friday              # topic-week test
+  warmup_before_test: "07:15"   # on test mornings; null to skip
+  sunday_prompt: "18:00"        # asks parents for the week's plan
+  weekly_report: "15:00"        # sent on test_day
+
+holidays:                       # no quizzes; parents can also use /holiday
+  - {name: Höstlov, from: 2026-10-26, to: 2026-10-30}
+
+student:
+  age: 14
+  grade: 8
+  lenient_spelling: true        # spelling is always checked in Svenska
+
+vocabulary:
+  languages: [es]
+  list_arrives: monday          # parents get a reminder that afternoon
+  test_day: tuesday             # of the following week, 8 days per list
+  reminder: "15:00"
+  words_per_round: 10
+  strict_accents: false         # a missing accent counts as almost right
+
+llm:
+  providers:
+    writer:                     # question writing and summaries, runs in the background
+      type: ollama
+      base_url: http://ollama:11434
+      model: gemma3:12b
+    grader:                     # local backup for grading
+      type: ollama
+      base_url: http://ollama:11434
+      model: gemma3:4b
+    # lmstudio:                 # optional: LM Studio or any OpenAI-compatible server
+    #   type: openai_compatible
+    #   base_url: http://desktop.lan:1234/v1
+    #   model: qwen3-14b
+    cloud:
+      type: anthropic
+      model: claude-opus-5      # API key from .env
+  tasks:                        # providers tried in order
+    classify: [writer]
+    generate_questions: [writer]
+    grade: [cloud, grader]
+    vocab_synonym: [cloud, grader]
+  allow_cloud: true             # false keeps everything at home
+
+updates:
+  check_time: "03:30"           # nightly check for new code
+  branch: stable

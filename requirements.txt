@@ -1,0 +1,10 @@
+python-telegram-bot[job-queue]==22.8
+anthropic==1.9.0
+httpx==0.28.1
+PyYAML>=6.0
+pypdf>=6.0
+python-docx>=1.1
+pillow>=11.0
+pillow-heif>=0.20
+pytesseract>=0.3.13
+holidays>=0.100
