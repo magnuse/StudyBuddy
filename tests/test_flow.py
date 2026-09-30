@@ -206,3 +206,19 @@ async def test_vocab_without_lists_says_so(db, config):
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text))
     await student.cmd_vocab(update, context)
     assert replies == ["Det finns inga glosor att öva på just nu."]
+
+
+def test_activity_log_names_the_user_and_command(db):
+    from app.main import describe_activity
+
+    db.add_member(100, "Elev", "student")
+
+    def update(user_id, text=None, data=None, document=None):
+        message = SimpleNamespace(text=text, document=document, photo=None)
+        query = SimpleNamespace(data=data) if data else None
+        return SimpleNamespace(effective_user=SimpleNamespace(id=user_id), callback_query=query, effective_message=message)
+
+    assert describe_activity(update(100, "/vocab"), db) == "Elev (student) ran /vocab"
+    assert describe_activity(update(7, "/start ABCD1234"), db) == "unknown user 7 ran /start"
+    assert describe_activity(update(100, data="s:go"), db) == "Elev (student) pressed button s:go"
+    assert describe_activity(update(100, "la casa"), db) is None  # answers stay out of the log

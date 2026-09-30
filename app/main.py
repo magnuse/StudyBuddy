@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler,
-                          filters)
+                          TypeHandler, filters)
 
 from . import handlers_parent as parent
 from . import handlers_student as student
@@ -105,6 +105,32 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     log.error("Error while handling an update", exc_info=context.error)
 
 
+def describe_activity(update: Update, db: Database) -> str | None:
+    """One log line for a command, button press or upload; None for plain text such as answers."""
+    user = update.effective_user
+    if user is None:
+        return None
+    member = db.member(user.id)
+    who = f"{member.name} ({member.role})" if member else f"unknown user {user.id}"
+    if update.callback_query:
+        return f"{who} pressed button {update.callback_query.data}"
+    message = update.effective_message
+    if message is None:
+        return None
+    if message.text and message.text.startswith("/"):
+        command = message.text.split()[0].split("@")[0]  # arguments left out: /start carries invite codes
+        return f"{who} ran {command}"
+    if message.document or message.photo:
+        return f"{who} sent a {'file' if message.document else 'photo'}"
+    return None
+
+
+async def log_activity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    line = describe_activity(update, context.application.bot_data["app"].db)
+    if line:
+        log.info(line)
+
+
 async def on_stranger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_message:
         await update.effective_message.reply_text("Den här boten är privat. Be en förälder om en inbjudningskod.")
@@ -121,6 +147,7 @@ def build_application(config: Config) -> Application:
     application.bot_data["app"] = app
     is_parent, is_student = RoleFilter(db, "parent"), RoleFilter(db, "student")
 
+    application.add_handler(TypeHandler(Update, log_activity), group=-1)  # runs before the real handlers
     application.add_handler(CommandHandler("start", parent.cmd_start))
     parent_commands = {
         "invite": parent.cmd_invite, "family": parent.cmd_family, "subjects": parent.cmd_subjects,
