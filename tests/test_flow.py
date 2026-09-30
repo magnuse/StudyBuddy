@@ -162,3 +162,47 @@ async def test_parent_removes_a_word_list_from_words(db, config):
     assert not db.list_cards(broken) and len(db.list_cards(keep)) == 2
     assert not db.q("SELECT * FROM attempts")
     assert any("tog bort" in t for _, t, _ in context.bot.sent)
+
+
+async def test_student_starts_a_vocab_round_himself(db, config):
+    db.add_member(100, "Elev", "student")
+    subject = db.ensure_subject("Spanska", "es")
+    list_id = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2026, 10, 6))
+    for i in range(12):
+        db.add_word(list_id, f"palabra{i}", f"ord{i}", [], [])
+    db.approve_vocab_list(list_id)
+    context, app = make_context(db, config)
+    replies = []
+
+    async def reply_text(text, **kwargs):
+        replies.append(text)
+
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text))
+    await student.cmd_vocab(update, context)
+    session = app.sessions[100]
+    assert session.started and session.plan.mode == "intro" and len(session.queue) + 1 == 12
+    assert "12 ord" in replies[-1] and session.current.kind == "mc"
+
+    await student.cmd_vocab(update, context)  # a round is already running
+    assert "pågående" in replies[-1]
+
+    app.sessions.pop(100)
+    card = db.list_cards(list_id)[0]
+    db.record_attempt(card["id"], "fel", 0, None)
+    await student.cmd_vocab(update, context)
+    session = app.sessions[100]
+    assert session.plan.mode == "typed" and session.plan.card_ids[0] == card["id"]
+    assert len(session.plan.card_ids) == 2 * config.vocabulary["words_per_round"]
+
+
+async def test_vocab_without_lists_says_so(db, config):
+    db.add_member(100, "Elev", "student")
+    context, app = make_context(db, config)
+    replies = []
+
+    async def reply_text(text, **kwargs):
+        replies.append(text)
+
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text))
+    await student.cmd_vocab(update, context)
+    assert replies == ["Det finns inga glosor att öva på just nu."]

@@ -33,7 +33,7 @@ PARENT_COMMANDS = [
     ("family", "Medlemmar"), ("update", "Uppdatera boten nu"), ("version", "Version och senaste ändring"),
     ("test_models", "Jämför AI-modellerna"),
 ]
-STUDENT_COMMANDS = [("quiz", "Öva nu"), ("snooze", "Skjut upp 30 min"), ("progress", "Svit och poäng")]
+STUDENT_COMMANDS = [("quiz", "Öva nu"), ("vocab", "Öva glosor nu"), ("snooze", "Skjut upp 30 min"), ("progress", "Svit och poäng")]
 
 
 class RoleFilter(filters.MessageFilter):
@@ -131,7 +131,7 @@ def build_application(config: Config) -> Application:
     }
     for name, callback in parent_commands.items():
         application.add_handler(CommandHandler(name, callback, filters=is_parent))
-    for name, callback in {"quiz": student.cmd_quiz, "snooze": student.cmd_snooze, "progress": student.cmd_progress}.items():
+    for name, callback in {"quiz": student.cmd_quiz, "vocab": student.cmd_vocab, "snooze": student.cmd_snooze, "progress": student.cmd_progress}.items():
         application.add_handler(CommandHandler(name, callback, filters=is_student))
 
     application.add_handler(CallbackQueryHandler(parent.on_callback, pattern=r"^p:"))

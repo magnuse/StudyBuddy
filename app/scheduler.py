@@ -204,6 +204,24 @@ def plan_evening(db: Database, config: Config, now: datetime, rng: random.Random
     return [Plan("vocab", label, [c["id"] for c in weak[:per_round]], "missed", per_round)] if weak else []
 
 
+def plan_vocab_now(db: Database, config: Config, now: datetime, rng: random.Random) -> Plan | None:
+    """A round the student starts himself: the list with the nearest test, weakest words first."""
+    testing, learning = vocab_lists_for(db, now.date())
+    row = testing or learning
+    if row is None:
+        return None
+    per_round = config.vocabulary["words_per_round"]
+    label = f"{row['subject']}: {row['title']}"
+    cards = list(_cards(db, row))
+    if cards and all(c["seen"] == 0 for c in cards):
+        intro = [c for c in cards if c["direction"] == "to_sv"]
+        rng.shuffle(intro)
+        return Plan("vocab", label, [c["id"] for c in intro], "intro", per_round)
+    rng.shuffle(cards)
+    cards.sort(key=lambda c: (c["box"], c["seen"] == 0, c["correct"] / max(c["seen"], 1)))  # missed words first
+    return Plan("vocab", label, [c["id"] for c in cards[: per_round * 2]], "typed", per_round) if cards else None
+
+
 def plan_warmup(db: Database, config: Config, now: datetime, rng: random.Random) -> list[Plan]:
     today = now.date()
     plans = []

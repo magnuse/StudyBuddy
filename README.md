@@ -21,7 +21,7 @@ Public holidays, `/holiday` weeks and `/pause` stop all quizzes.
 ## Commands
 
 Parents: `/status`, `/material`, `/words`, `/subjects`, `/schedule`, `/holiday`, `/pause`, `/resume`, `/invite parent|student`, `/family`, `/update`, `/version`, `/test_models`.
-Student: `/quiz`, `/snooze`, `/progress`.
+Student: `/quiz`, `/vocab` (a word round right now, weakest words first), `/snooze`, `/progress`.
 
 `/words` lists the current word lists with a remove button under each, for a list that came out wrong. Removing one also removes the answers given on it.
 

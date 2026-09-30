@@ -14,7 +14,7 @@ from telegram.ext import ContextTypes
 from .context import AppContext, app_of
 from .grade import Grade, check_synonym, grade_free_text, grade_multiple_choice
 from .llm import LLMError
-from .scheduler import Plan, is_day_off, plan_saturday, plan_slot
+from .scheduler import Plan, is_day_off, plan_saturday, plan_slot, plan_vocab_now
 from .session import QuizItem, Result, Session, build_session
 from .vocab import Verdict, check_answer
 
@@ -327,6 +327,27 @@ async def cmd_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Inget att öva på just nu. Bra jobbat! 🎉")
         return
     await offer_plans(context, chat_id, plans)
+
+
+async def cmd_vocab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Starts a vocabulary round right away, whatever the schedule says."""
+    app = app_of(context)
+    chat_id = update.effective_chat.id
+    session = app.sessions.get(chat_id)
+    if session is not None and session.started:
+        await update.message.reply_text("Gör klart den pågående rundan först, sen kan du köra glosor.")
+        return
+    plan = plan_vocab_now(app.db, app.config, datetime.now(), app.rng)
+    if plan is None:
+        await update.message.reply_text("Det finns inga glosor att öva på just nu.")
+        return
+    if session is not None:
+        app.waiting.setdefault(chat_id, []).insert(0, session.plan)  # offered batch comes back afterwards
+    session = build_session(app.db, plan, app.rng)
+    session.started = True
+    app.sessions[chat_id] = session
+    await update.message.reply_text(_intro_text(plan, len(session.queue)), parse_mode=ParseMode.HTML)
+    await _ask(context, chat_id, session)
 
 
 async def cmd_snooze(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
