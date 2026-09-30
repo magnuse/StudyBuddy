@@ -107,3 +107,14 @@ def test_application_builds_with_all_handlers_and_jobs(tmp_path):
     assert {"afternoon", "evening", "warmup", "saturday", "sunday_prompt", "vocab_reminder", "weekly_report",
             "update_check"} <= names
     assert sum(len(h) for h in application.handlers.values()) >= 20
+
+
+async def test_run_slot_logs_why_nothing_was_sent(db, config, caplog):
+    import logging
+
+    context, app = make_context(db, config)
+    context.job = SimpleNamespace(data={"slot": "evening"})
+    with caplog.at_level(logging.INFO):
+        await student.run_slot(context)
+    assert "Slot evening: nothing sent" in caplog.text
+    assert not context.bot.sent
