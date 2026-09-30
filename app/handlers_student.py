@@ -14,7 +14,7 @@ from telegram.ext import ContextTypes
 from .context import AppContext, app_of
 from .grade import Grade, check_synonym, grade_free_text, grade_multiple_choice
 from .llm import LLMError
-from .scheduler import Plan, plan_saturday, plan_slot
+from .scheduler import Plan, is_day_off, plan_saturday, plan_slot
 from .session import QuizItem, Result, Session, build_session
 from .vocab import Verdict, check_answer
 
@@ -114,9 +114,16 @@ async def run_slot(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Job callback for a scheduled time slot."""
     app = app_of(context)
     slot = context.job.data["slot"]
-    plans = plan_slot(slot, app.db, app.config, datetime.now(), app.rng)
+    now = datetime.now()
+    plans = plan_slot(slot, app.db, app.config, now, app.rng)
     if not plans:
+        reason = is_day_off(now.date(), app.config, app.db) or "nothing due (no approved questions or word list for today)"
+        log.info("Slot %s: nothing sent, %s", slot, reason)
         return
+    if not students(app):
+        log.warning("Slot %s: no student has joined yet, use /invite student", slot)
+        return
+    log.info("Slot %s: offering %s", slot, ", ".join(f"{p.title} ({len(p.card_ids)})" for p in plans))
     for chat_id in students(app):
         await offer_plans(context, chat_id, plans)
 
