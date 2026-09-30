@@ -139,14 +139,27 @@ def vocab_lists_for(db: Database, today: date) -> tuple[object | None, object | 
     return testing, learning
 
 
+def _same_test(row, other) -> bool:
+    return other["subject_id"] == row["subject_id"] and other["test_date"] == row["test_date"]
+
+
+def _cards(db: Database, row, direction: str | None = None) -> list:
+    """Cards of a list plus any other list for the same test (a list sent as several photos)."""
+    cards = []
+    for other in db.vocab_lists():
+        if other["id"] == row["id"] or (row["test_date"] and _same_test(row, other)):
+            cards += db.list_cards(other["id"], direction)
+    return cards
+
+
 def effective_start(db: Database, row) -> date:
     """A new list starts after the previous list's test, even if it arrived earlier."""
-    start, _ = _list_dates(row)
+    start, test = _list_dates(row)
     for other in db.vocab_lists():
         if other["id"] == row["id"] or other["subject_id"] != row["subject_id"]:
             continue
         other_start, other_test = _list_dates(other)
-        if other_test and other_start <= start <= other_test:
+        if other_test and (test is None or other_test < test) and other_start <= start <= other_test:
             start = max(start, other_test)
     return start
 
@@ -157,7 +170,7 @@ def plan_evening(db: Database, config: Config, now: datetime, rng: random.Random
     testing, learning = vocab_lists_for(db, today)
 
     if testing is not None and testing["test_date"] == (today + timedelta(days=1)).isoformat():
-        cards = db.list_cards(testing["id"])
+        cards = _cards(db, testing)
         by_word: dict[int, list] = {}
         for card in cards:
             by_word.setdefault(card["item_id"], []).append(card)
@@ -176,17 +189,17 @@ def plan_evening(db: Database, config: Config, now: datetime, rng: random.Random
     day = (today - start).days
     label = f"{learning['subject']}: {learning['title']}"
     if day == 0:
-        cards = db.list_cards(learning["id"], "to_sv")
+        cards = _cards(db, learning, "to_sv")
         return [Plan("vocab", label, [c["id"] for c in cards], "intro", per_round)]
     if day == 1:
-        cards = list(db.list_cards(learning["id"]))
+        cards = list(_cards(db, learning))
         rng.shuffle(cards)
         return [Plan("vocab", label, [c["id"] for c in cards], "typed", per_round)]
     if today.weekday() == 5:
-        cards = list(db.list_cards(learning["id"]))
+        cards = list(_cards(db, learning))
         rng.shuffle(cards)
         return [Plan("vocab", label, [c["id"] for c in cards[: per_round * 2]], "mixed", per_round)]
-    cards = _due_first(db.list_cards(learning["id"]), now, rng)
+    cards = _due_first(_cards(db, learning), now, rng)
     weak = [c for c in cards if c["box"] <= 1] or cards
     return [Plan("vocab", label, [c["id"] for c in weak[:per_round]], "missed", per_round)] if weak else []
 
@@ -201,7 +214,7 @@ def plan_warmup(db: Database, config: Config, now: datetime, rng: random.Random)
                 plans.append(Plan("warmup", f"Uppvärmning inför provet i {topic['subject']}", [c["id"] for c in hardest]))
     testing, _ = vocab_lists_for(db, today)
     if testing is not None and testing["test_date"] == today.isoformat():
-        hardest = _hardest(db.list_cards(testing["id"], "from_sv"), 5)
+        hardest = _hardest(_cards(db, testing, "from_sv"), 5)
         if hardest:
             plans.append(Plan("vocab", f"Uppvärmning inför glosförhöret i {testing['subject']}", [c["id"] for c in hardest], "test"))
     return plans

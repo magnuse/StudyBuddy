@@ -111,3 +111,12 @@ def test_session_for_vocab_intro_uses_multiple_choice(db, config):
     item = session.next_item()
     assert item.kind == "mc" and item.expected[0] in item.options and len(item.options) == 3
     assert item.language == "sv" and "<b>palabra" in item.prompt
+
+
+def test_list_sent_as_two_parts_starts_the_same_evening(db, config):
+    # Magnus's case: 2 + 30 words sent on Wednesday for the same test.
+    make_words(db, date(2026, 9, 30), date(2026, 10, 6), count=2)
+    make_words(db, date(2026, 9, 30), date(2026, 10, 6), count=30)
+    plans = plan_slot("evening", db, config, datetime(2026, 9, 30, 19, 0), random.Random(1))
+    assert len(plans) == 1 and plans[0].mode == "intro"
+    assert len(plans[0].card_ids) == 32  # one to_sv card per word, both parts
