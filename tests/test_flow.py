@@ -249,3 +249,32 @@ def test_edited_messages_do_not_run_commands_or_answers(tmp_path):
     assert matches(make("message", "/update"))
     assert not matches(make("edited_message", "/update"))
     assert not matches(make("edited_message", "hej"))
+
+
+async def test_words_shows_a_list_waiting_for_approval(db, config):
+    from app import handlers_parent as parent
+
+    db.add_member(1, "Magnus", "parent")
+    subject = db.ensure_subject("Spanska", "es")
+    pending = db.create_vocab_list(subject["id"], "v41", date(2026, 9, 30), date(2099, 10, 13))
+    db.add_word(pending, "el perro", "hunden", [], [])
+    context, app = make_context(db, config)
+    replies = []
+
+    async def reply_text(text, **kwargs):
+        replies.append((text, kwargs.get("reply_markup")))
+
+    async def noop(*args):
+        pass
+
+    message = SimpleNamespace(reply_text=reply_text)
+    await parent.cmd_words(SimpleNamespace(message=message, effective_message=message), context)
+    text, markup = replies[-1]
+    assert "väntar på godkännande" in text
+    approve = markup.inline_keyboard[0][0]
+    assert approve.callback_data == f"p:wl:ok:{pending}"
+
+    query = SimpleNamespace(data=approve.callback_data, from_user=SimpleNamespace(id=1, first_name="Magnus"),
+                            message=message, answer=noop, edit_message_reply_markup=noop)
+    await parent.on_callback(SimpleNamespace(callback_query=query), context)
+    assert [v["id"] for v in db.vocab_lists()] == [pending]

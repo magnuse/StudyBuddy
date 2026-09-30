@@ -511,7 +511,7 @@ async def cmd_material(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     app = app_of(context)
     today = date.today().isoformat()
-    lists = [v for v in app.db.vocab_lists() if not v["test_date"] or v["test_date"] >= today]
+    lists = [v for v in app.db.vocab_lists(approved_only=False) if not v["test_date"] or v["test_date"] >= today]
     if not lists:
         await update.effective_message.reply_text("Inga aktuella glosor. Skicka veckans lista, till exempel som foto med bildtexten 'Spanska glosor'.")
         return
@@ -524,8 +524,15 @@ async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         known = sum(1 for cs in by_word.values() if all(c["box"] >= 2 for c in cs))
         weak = [cs[0] for cs in by_word.values() if any(c["seen"] > c["correct"] for c in cs)]
         weak_text = ", ".join(f"{html.escape(c['term'])}" for c in weak[:15]) or "inga än"
-        parts.append(f"<b>{html.escape(vocab['subject'])}: {html.escape(vocab['title'])}</b> "
-                     f"(glosförhör {vocab['test_date']})\nKan: {known} av {len(by_word)}\nMissar: {weak_text}")
+        heading = (f"<b>{html.escape(vocab['subject'])}: {html.escape(vocab['title'])}</b> "
+                   f"(glosförhör {vocab['test_date'] or 'inget datum'})")
+        if not vocab["approved"]:
+            count = len(app.db.words(vocab["id"]))
+            parts.append(f"{heading}\n⏳ {count} ord väntar på godkännande och övas inte än.")
+            buttons.append([InlineKeyboardButton(f"Godkänn {count} ord", callback_data=f"p:wl:ok:{vocab['id']}"),
+                            InlineKeyboardButton("Ta bort", callback_data=f"p:wd:ask:{vocab['id']}")])
+            continue
+        parts.append(f"{heading}\nKan: {known} av {len(by_word)}\nMissar: {weak_text}")
         buttons.append([InlineKeyboardButton(f"Ta bort {vocab['title']} ({len(by_word)} ord)",
                                              callback_data=f"p:wd:ask:{vocab['id']}")])
     await update.effective_message.reply_text("\n\n".join(parts), parse_mode=ParseMode.HTML,
