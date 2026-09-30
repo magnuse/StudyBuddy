@@ -437,11 +437,37 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await notify_parents(context, f"✅ {who} godkände {count} glosor i {html.escape(vocab['subject'])} "
                                           f"(glosförhör {vocab['test_date']}).")
         else:
-            app.db.run("DELETE FROM vocab_words WHERE list_id = ?", (list_id,))
-            app.db.run("DELETE FROM vocab_lists WHERE id = ?", (list_id,))
+            app.db.delete_vocab_list(list_id)
             app.uploads.pop(user_id, None)
             await query.edit_message_reply_markup(None)
             await query.message.reply_text("Glosorna togs bort.")
+    elif action == "wd":
+        list_id = int(parts[3])
+        vocab = app.db.vocab_list(list_id)
+        if vocab is None:
+            await query.edit_message_reply_markup(None)
+            await query.message.reply_text("Listan finns inte längre.")
+        elif parts[2] == "ask":
+            count = len(app.db.words(list_id))
+            await query.message.reply_text(
+                f"Ta bort <b>{html.escape(vocab['subject'])}: {html.escape(vocab['title'])}</b> ({count} ord)? "
+                "Alla svar på de här glosorna tas också bort.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Ja, ta bort", callback_data=f"p:wd:yes:{list_id}"),
+                    InlineKeyboardButton("Behåll", callback_data=f"p:wd:no:{list_id}"),
+                ]]))
+        elif parts[2] == "yes":
+            removed = set(app.db.delete_vocab_list(list_id))
+            for chat_id, session in list(app.sessions.items()):
+                if removed & ({i.card_id for i in session.queue} | ({session.current.card_id} if session.current else set())):
+                    app.sessions.pop(chat_id, None)  # the running round used these words
+            await query.edit_message_reply_markup(None)
+            await notify_parents(context, f"🗑️ {who} tog bort {html.escape(vocab['subject'])}: "
+                                          f"{html.escape(vocab['title'])} (glosförhör {vocab['test_date']}).")
+        else:
+            await query.edit_message_reply_markup(None)
+            await query.message.reply_text("Listan är kvar.")
     elif action == "tq":
         topic_id = int(parts[3])
         if parts[2] == "ok":
@@ -489,7 +515,7 @@ async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not lists:
         await update.message.reply_text("Inga aktuella glosor. Skicka veckans lista, till exempel som foto med bildtexten 'Spanska glosor'.")
         return
-    parts = []
+    parts, buttons = [], []
     for vocab in lists:
         cards = app.db.list_cards(vocab["id"])
         by_word: dict[int, list] = {}
@@ -500,7 +526,10 @@ async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         weak_text = ", ".join(f"{html.escape(c['term'])}" for c in weak[:15]) or "inga än"
         parts.append(f"<b>{html.escape(vocab['subject'])}: {html.escape(vocab['title'])}</b> "
                      f"(glosförhör {vocab['test_date']})\nKan: {known} av {len(by_word)}\nMissar: {weak_text}")
-    await update.message.reply_text("\n\n".join(parts), parse_mode=ParseMode.HTML)
+        buttons.append([InlineKeyboardButton(f"Ta bort {vocab['title']} ({len(by_word)} ord)",
+                                             callback_data=f"p:wd:ask:{vocab['id']}")])
+    await update.message.reply_text("\n\n".join(parts), parse_mode=ParseMode.HTML,
+                                    reply_markup=InlineKeyboardMarkup(buttons))
 
 
 async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

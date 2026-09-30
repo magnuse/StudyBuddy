@@ -118,3 +118,47 @@ async def test_run_slot_logs_why_nothing_was_sent(db, config, caplog):
         await student.run_slot(context)
     assert "Slot evening: nothing sent" in caplog.text
     assert not context.bot.sent
+
+
+async def test_parent_removes_a_word_list_from_words(db, config):
+    db.add_member(1, "Magnus", "parent")
+    db.add_member(100, "Elev", "student")
+    subject = db.ensure_subject("Spanska", "es")
+    keep = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2026, 10, 6))
+    db.add_word(keep, "el coche", "bilen", [], [])
+    db.approve_vocab_list(keep)
+    broken = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2026, 10, 6))
+    db.add_word(broken, "la casa", "huset", [], [])
+    db.approve_vocab_list(broken)
+    card = db.list_cards(broken)[0]
+    db.record_attempt(card["id"], "huset", 2, None)
+    context, app = make_context(db, config)
+
+    replies = []
+
+    async def reply_text(text, **kwargs):
+        replies.append((text, kwargs.get("reply_markup")))
+
+    async def edit_markup(markup):
+        pass
+
+    async def answer():
+        pass
+
+    from app import handlers_parent as parent
+
+    message = SimpleNamespace(reply_text=reply_text)
+    await parent.cmd_words(SimpleNamespace(message=message), context)
+    remove_buttons = [row[0].callback_data for row in replies[-1][1].inline_keyboard]
+    assert remove_buttons == [f"p:wd:ask:{keep}", f"p:wd:ask:{broken}"]
+
+    user = SimpleNamespace(id=1, first_name="Magnus")
+    for data in (f"p:wd:ask:{broken}", f"p:wd:yes:{broken}"):
+        query = SimpleNamespace(data=data, from_user=user, message=message, answer=answer,
+                                edit_message_reply_markup=edit_markup)
+        await parent.on_callback(SimpleNamespace(callback_query=query), context)
+    assert "Ta bort" in replies[-1][0]
+    assert [v["id"] for v in db.vocab_lists()] == [keep]
+    assert not db.list_cards(broken) and len(db.list_cards(keep)) == 2
+    assert not db.q("SELECT * FROM attempts")
+    assert any("tog bort" in t for _, t, _ in context.bot.sent)

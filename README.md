@@ -23,6 +23,8 @@ Public holidays, `/holiday` weeks and `/pause` stop all quizzes.
 Parents: `/status`, `/material`, `/words`, `/subjects`, `/schedule`, `/holiday`, `/pause`, `/resume`, `/invite parent|student`, `/family`, `/update`, `/version`, `/test_models`.
 Student: `/quiz`, `/snooze`, `/progress`.
 
+`/words` lists the current word lists with a remove button under each, for a list that came out wrong. Removing one also removes the answers given on it.
+
 Parents add material by sending a PDF, Word file, photo or text to the bot. Put the subject and test date in the caption, for example `SO, prov fredag` or `Spanska glosor`. Without a caption, the bot guesses and asks you to confirm.
 
 ## Setup on Unraid

@@ -324,6 +324,18 @@ class Database:
             sql += " AND v.approved = 1"
         return self.q(sql + " ORDER BY v.start_date, v.id")
 
+    def delete_vocab_list(self, list_id: int) -> list[int]:
+        """Removes a word list with its words, cards and answers. Returns the removed card ids."""
+        card_ids = [r["id"] for r in self.q(
+            "SELECT c.id FROM cards c JOIN vocab_words w ON w.id = c.item_id WHERE c.item_type = 'w' AND w.list_id = ?",
+            (list_id,))]
+        for card_id in card_ids:
+            self.run("DELETE FROM attempts WHERE card_id = ?", (card_id,))
+            self.run("DELETE FROM cards WHERE id = ?", (card_id,))
+        self.run("DELETE FROM vocab_words WHERE list_id = ?", (list_id,))
+        self.run("DELETE FROM vocab_lists WHERE id = ?", (list_id,))
+        return card_ids
+
     def approve_vocab_list(self, list_id: int) -> int:
         self.run("UPDATE vocab_lists SET approved = 1 WHERE id = ?", (list_id,))
         words = self.words(list_id)

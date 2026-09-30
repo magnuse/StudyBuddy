@@ -27,7 +27,7 @@ ALL_DAYS = (0, 1, 2, 3, 4, 5, 6)  # python-telegram-bot: 0 = Sunday … 6 = Satu
 
 PARENT_COMMANDS = [
     ("status", "Veckans läge per ämne"), ("material", "Material och frågor att godkänna"),
-    ("words", "Veckans glosor och ord han missar"), ("subjects", "Ämnen och områden"),
+    ("words", "Glosor, ord han missar, ta bort en lista"), ("subjects", "Ämnen och områden"),
     ("schedule", "Tider"), ("holiday", "Lägg in lov"), ("pause", "Pausa frågor i N dagar"),
     ("resume", "Starta frågor igen"), ("invite", "Bjud in: /invite parent eller student"),
     ("family", "Medlemmar"), ("update", "Uppdatera boten nu"), ("version", "Version och senaste ändring"),
