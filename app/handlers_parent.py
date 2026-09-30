@@ -63,12 +63,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if member:
         text = ("Hej igen! Skicka material, glosor eller skriv /status." if member.role == "parent"
                 else "Hej igen! Skriv /quiz för att öva nu, eller vänta på nästa pass.")
-        await update.message.reply_text(text)
+        await update.effective_message.reply_text(text)
         return
     if not app.db.members("parent") and app.config.first_parent_id == user_id:
         app.db.add_member(user_id, _name(update), "parent")
         await _set_commands(context, user_id, "parent")
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "Välkommen! Du är tillagd som förälder.\n"
             "Lägg till fler med /invite parent eller /invite student.\n"
             "Börja med att skicka hans ämnen, till exempel: /subjects add Spanska")
@@ -76,16 +76,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     code = context.args[0] if context.args else ""
     role = app.db.use_invite(code, user_id) if code else None
     if role is None:
-        await update.message.reply_text("Den här boten är privat. Be en förälder om en inbjudningskod.")
+        await update.effective_message.reply_text("Den här boten är privat. Be en förälder om en inbjudningskod.")
         return
     app.db.add_member(user_id, _name(update), role)
     await _set_commands(context, user_id, role)
     if role == "student":
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "Hej! Jag är din studybuddy. Efter skolan skickar jag några snabba frågor om det ni läser just nu. "
             "Svara genom att trycka eller skriva. Skriv /quiz om du vill öva direkt, och /progress för din svit och dina poäng.")
     else:
-        await update.message.reply_text("Välkommen! Du är tillagd som förälder. Skriv /status för att se läget.")
+        await update.effective_message.reply_text("Välkommen! Du är tillagd som förälder. Skriv /status för att se läget.")
     await notify_parents(context, f"👋 {html.escape(_name(update))} gick med som {'elev' if role == 'student' else 'förälder'}.",
                          exclude=user_id)
 
@@ -95,11 +95,11 @@ async def cmd_invite(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     role_arg = (context.args[0].lower() if context.args else "")
     role = {"parent": "parent", "student": "student"}.get(role_arg)
     if role is None:
-        await update.message.reply_text("Skriv /invite parent eller /invite student.")
+        await update.effective_message.reply_text("Skriv /invite parent eller /invite student.")
         return
     code = app.db.create_invite(role, update.effective_user.id)
     bot = await context.bot.get_me()
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         f"Inbjudningskod: <code>{code}</code> (gäller i 24 timmar, en gång).\n"
         f"Be {'eleven' if role == 'student' else 'den andra föräldern'} öppna @{bot.username} i Telegram "
         f"och skicka:\n<code>/start {code}</code>", parse_mode=ParseMode.HTML)
@@ -112,7 +112,7 @@ async def cmd_family(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
              for m in members]
     buttons = [[InlineKeyboardButton(f"Ta bort {m.name}", callback_data=f"p:rm:{m.id}")]
                for m in members if m.telegram_id != update.effective_user.id]
-    await update.message.reply_text("\n".join(lines) or "Inga medlemmar.", parse_mode=ParseMode.HTML,
+    await update.effective_message.reply_text("\n".join(lines) or "Inga medlemmar.", parse_mode=ParseMode.HTML,
                                     reply_markup=InlineKeyboardMarkup(buttons) if buttons else None)
 
 
@@ -125,28 +125,28 @@ async def cmd_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         name = " ".join(args[1:])
         app.db.ensure_subject(name, _language_for(name))
         kind = " (glosläge)" if _language_for(name) else ""
-        await update.message.reply_text(f"Ämnet {name} är tillagt{kind}.")
+        await update.effective_message.reply_text(f"Ämnet {name} är tillagt{kind}.")
         return
     if len(args) >= 3 and args[0].lower() == "rename":
         old, new = args[1], " ".join(args[2:])
         row = app.db.subject_by_name(old)
         if row is None:
-            await update.message.reply_text(f"Hittar inget ämne som heter {old}.")
+            await update.effective_message.reply_text(f"Hittar inget ämne som heter {old}.")
             return
         app.db.run("UPDATE subjects SET name = ? WHERE id = ?", (new, row["id"]))
-        await update.message.reply_text(f"{old} heter nu {new}.")
+        await update.effective_message.reply_text(f"{old} heter nu {new}.")
         return
     if len(args) >= 3 and args[0].lower() == "weight":
         row = app.db.subject_by_name(args[1])
         if row is None:
-            await update.message.reply_text(f"Hittar inget ämne som heter {args[1]}.")
+            await update.effective_message.reply_text(f"Hittar inget ämne som heter {args[1]}.")
             return
         app.db.run("UPDATE subjects SET weight = ? WHERE id = ?", (float(args[2]), row["id"]))
-        await update.message.reply_text(f"{row['name']} har nu vikt {args[2]}.")
+        await update.effective_message.reply_text(f"{row['name']} har nu vikt {args[2]}.")
         return
     subjects = app.db.subjects()
     if not subjects:
-        await update.message.reply_text("Inga ämnen än. Lägg till med till exempel /subjects add SO")
+        await update.effective_message.reply_text("Inga ämnen än. Lägg till med till exempel /subjects add SO")
         return
     lines, buttons = [], []
     for subject in subjects:
@@ -159,7 +159,7 @@ async def cmd_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         label = "Stäng av" if subject["active"] else "Slå på"
         buttons.append([InlineKeyboardButton(f"{label} {subject['name']}", callback_data=f"p:subj:{subject['id']}")])
     lines.append("\nÄndra: /subjects add Namn, /subjects rename Gammalt Nytt")
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(buttons))
+    await update.effective_message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 # ---- uploads -----------------------------------------------------------------------
@@ -167,7 +167,7 @@ async def cmd_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def on_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """A parent sent a document, photo or plain text that is not a command."""
     app = app_of(context)
-    message = update.message
+    message = update.effective_message
     user_id = update.effective_user.id
     upload = app.uploads.get(user_id)
 
@@ -268,7 +268,7 @@ async def on_parent_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Short text from a parent: a date correction, a new subject name, or new material."""
     app = app_of(context)
     upload = app.uploads.get(update.effective_user.id)
-    text = update.message.text.strip()
+    text = update.effective_message.text.strip()
     if upload and upload.subject != "?" and text.lower().startswith(("prov", "glosförhör")):
         new_date = parse_date(text, date.today())
         if new_date:
@@ -503,9 +503,9 @@ async def cmd_material(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                      f"{', prov ' + topic['test_date'] if topic['test_date'] else ''}"
                      f"{' (repetition)' if topic['status'] == 'review' else ''}")
     if not lines and not pending:
-        await update.message.reply_text("Inget material än. Skicka en PDF, en bild eller text med ämnet i bildtexten.")
+        await update.effective_message.reply_text("Inget material än. Skicka en PDF, en bild eller text med ämnet i bildtexten.")
     elif lines:
-        await update.message.reply_text("<b>Områden</b>\n" + "\n".join(lines), parse_mode=ParseMode.HTML)
+        await update.effective_message.reply_text("<b>Områden</b>\n" + "\n".join(lines), parse_mode=ParseMode.HTML)
 
 
 async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -513,7 +513,7 @@ async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     today = date.today().isoformat()
     lists = [v for v in app.db.vocab_lists() if not v["test_date"] or v["test_date"] >= today]
     if not lists:
-        await update.message.reply_text("Inga aktuella glosor. Skicka veckans lista, till exempel som foto med bildtexten 'Spanska glosor'.")
+        await update.effective_message.reply_text("Inga aktuella glosor. Skicka veckans lista, till exempel som foto med bildtexten 'Spanska glosor'.")
         return
     parts, buttons = [], []
     for vocab in lists:
@@ -528,7 +528,7 @@ async def cmd_words(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                      f"(glosförhör {vocab['test_date']})\nKan: {known} av {len(by_word)}\nMissar: {weak_text}")
         buttons.append([InlineKeyboardButton(f"Ta bort {vocab['title']} ({len(by_word)} ord)",
                                              callback_data=f"p:wd:ask:{vocab['id']}")])
-    await update.message.reply_text("\n\n".join(parts), parse_mode=ParseMode.HTML,
+    await update.effective_message.reply_text("\n\n".join(parts), parse_mode=ParseMode.HTML,
                                     reply_markup=InlineKeyboardMarkup(buttons))
 
 
@@ -537,7 +537,7 @@ async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     s, v = app.config.schedule, app.config.vocabulary
     today = date.today()
     off = is_day_off(today, app.config, app.db)
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         f"<b>Tider</b>\nEfter skolan (temavecka): {s['afternoon']} mån–fre\nKväll (glosor): {s['evening']} varje dag\n"
         f"Repetition: lördag {s['saturday']}\nUppvärmning provdagar: {s['warmup_before_test'] or 'av'}\n"
         f"Prov temavecka: {s['test_day']}, glosförhör: {v['test_day']}\n"
@@ -552,16 +552,16 @@ async def cmd_holiday(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if len(args) >= 2:
         start, end = parse_date(args[0], date.today()), parse_date(args[1], date.today())
         if not start or not end or end < start:
-            await update.message.reply_text("Skriv till exempel: /holiday 2026-10-26 2026-10-30 Höstlov")
+            await update.effective_message.reply_text("Skriv till exempel: /holiday 2026-10-26 2026-10-30 Höstlov")
             return
         name = " ".join(args[2:]) or "Lov"
         holidays.append({"name": name, "from": start.isoformat(), "to": end.isoformat()})
         app.db.set_setting("holidays", json.dumps(holidays, ensure_ascii=False))
-        await update.message.reply_text(f"{name}: inga frågor {start} till {end}.")
+        await update.effective_message.reply_text(f"{name}: inga frågor {start} till {end}.")
         return
     listed = [f"{h['name']}: {h['from']} – {h['to']}" for h in holidays + [
         {"name": h.name, "from": h.start.isoformat(), "to": h.end.isoformat()} for h in app.config.holidays]]
-    await update.message.reply_text("\n".join(listed) or "Inga lov inlagda.\nLägg till: /holiday 2026-10-26 2026-10-30 Höstlov")
+    await update.effective_message.reply_text("\n".join(listed) or "Inga lov inlagda.\nLägg till: /holiday 2026-10-26 2026-10-30 Höstlov")
 
 
 async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -612,7 +612,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     app = app_of(context)
     today = date.today()
     since = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
-    await update.message.reply_text("<b>Den här veckan</b>\n" + weekly_summary(app, since), parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text("<b>Den här veckan</b>\n" + weekly_summary(app, since), parse_mode=ParseMode.HTML)
 
 
 async def job_weekly_report(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -645,7 +645,7 @@ async def job_vocab_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     app = app_of(context)
     info = updater.current_version(app.config.code_dir)
-    await update.message.reply_text(f"Version {info.version} ({info.commit})\nSenaste ändring: {info.subject or '-'}")
+    await update.effective_message.reply_text(f"Version {info.version} ({info.commit})\nSenaste ändring: {info.subject or '-'}")
 
 
 async def check_for_update(context: ContextTypes.DEFAULT_TYPE, forced_by: Update | None = None) -> None:
@@ -656,18 +656,18 @@ async def check_for_update(context: ContextTypes.DEFAULT_TYPE, forced_by: Update
     except Exception as exc:
         log.warning("Update check failed: %s", exc)
         if forced_by:
-            await forced_by.message.reply_text(f"Kunde inte söka efter uppdateringar: {exc}")
+            await forced_by.effective_message.reply_text(f"Kunde inte söka efter uppdateringar: {exc}")
         return
     if not new_commits:
         if forced_by:
-            await forced_by.message.reply_text("Boten är redan uppdaterad.")
+            await forced_by.effective_message.reply_text("Boten är redan uppdaterad.")
         return
     if any(s.started for s in app.sessions.values()):
         if forced_by:
-            await forced_by.message.reply_text("Ett pass pågår. Jag uppdaterar när det är klart, eller i natt.")
+            await forced_by.effective_message.reply_text("Ett pass pågår. Jag uppdaterar när det är klart, eller i natt.")
         return
     if forced_by:
-        await forced_by.message.reply_text(f"Uppdaterar ({len(new_commits)} ändringar) och startar om…")
+        await forced_by.effective_message.reply_text(f"Uppdaterar ({len(new_commits)} ändringar) och startar om…")
     context.application.create_task(updater.restart_soon())
 
 
@@ -690,7 +690,7 @@ SAMPLE_ANSWERS = ["den gjorde att fabriker inte behövde ligga vid vatten", "fö
 
 async def cmd_test_models(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     app = app_of(context)
-    await update.message.reply_text("Testar rättning med varje modell. Det kan ta några minuter på processorn…")
+    await update.effective_message.reply_text("Testar rättning med varje modell. Det kan ta några minuter på processorn…")
     lines = []
     for name, provider in app.router.providers.items():
         if provider.is_cloud and not app.router.allow_cloud:
@@ -705,4 +705,4 @@ async def cmd_test_models(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                          f"{grades[0].score} och {grades[1].score} (bör vara 1–2 och 0)\n<i>{grades[0].feedback}</i>")
         except LLMError as exc:
             lines.append(f"<b>{name}</b>: fel – {html.escape(str(exc))[:200]}")
-    await update.message.reply_text("\n\n".join(lines), parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text("\n\n".join(lines), parse_mode=ParseMode.HTML)

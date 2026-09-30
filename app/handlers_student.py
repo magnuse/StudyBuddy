@@ -305,7 +305,7 @@ async def snooze(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await handle_answer(context, update.effective_chat.id, update.message.text.strip())
+    await handle_answer(context, update.effective_chat.id, update.effective_message.text.strip())
 
 
 async def cmd_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -324,7 +324,7 @@ async def cmd_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not plans:
         plans = [p for p in plan_saturday(app.db, app.config, now, app.rng) if p.card_ids]
     if not plans:
-        await update.message.reply_text("Inget att öva på just nu. Bra jobbat! 🎉")
+        await update.effective_message.reply_text("Inget att öva på just nu. Bra jobbat! 🎉")
         return
     await offer_plans(context, chat_id, plans)
 
@@ -335,18 +335,18 @@ async def cmd_vocab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     session = app.sessions.get(chat_id)
     if session is not None and session.started:
-        await update.message.reply_text("Gör klart den pågående rundan först, sen kan du köra glosor.")
+        await update.effective_message.reply_text("Gör klart den pågående rundan först, sen kan du köra glosor.")
         return
     plan = plan_vocab_now(app.db, app.config, datetime.now(), app.rng)
     if plan is None:
-        await update.message.reply_text("Det finns inga glosor att öva på just nu.")
+        await update.effective_message.reply_text("Det finns inga glosor att öva på just nu.")
         return
     if session is not None:
         app.waiting.setdefault(chat_id, []).insert(0, session.plan)  # offered batch comes back afterwards
     session = build_session(app.db, plan, app.rng)
     session.started = True
     app.sessions[chat_id] = session
-    await update.message.reply_text(_intro_text(plan, len(session.queue)), parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(_intro_text(plan, len(session.queue)), parse_mode=ParseMode.HTML)
     await _ask(context, chat_id, session)
 
 
@@ -373,7 +373,7 @@ async def cmd_progress(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     attempts = app.db.attempts_since(week_start)
     points = sum(a["score"] for a in attempts)
     learned = app.db.one("SELECT COUNT(DISTINCT item_id) AS n FROM cards WHERE item_type = 'w' AND box >= 2")["n"]
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         f"🔥 Svit: {streak_days(app, today)} dagar i rad\n"
         f"⭐ Poäng den här veckan: {points}\n"
         f"📚 Glosor du kan: {learned}"

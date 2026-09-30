@@ -148,7 +148,7 @@ async def test_parent_removes_a_word_list_from_words(db, config):
     from app import handlers_parent as parent
 
     message = SimpleNamespace(reply_text=reply_text)
-    await parent.cmd_words(SimpleNamespace(message=message), context)
+    await parent.cmd_words(SimpleNamespace(message=message, effective_message=message), context)
     remove_buttons = [row[0].callback_data for row in replies[-1][1].inline_keyboard]
     assert remove_buttons == [f"p:wd:ask:{keep}", f"p:wd:ask:{broken}"]
 
@@ -177,7 +177,7 @@ async def test_student_starts_a_vocab_round_himself(db, config):
     async def reply_text(text, **kwargs):
         replies.append(text)
 
-    update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text))
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text), effective_message=SimpleNamespace(reply_text=reply_text))
     await student.cmd_vocab(update, context)
     session = app.sessions[100]
     assert session.started and session.plan.mode == "intro" and len(session.queue) + 1 == 12
@@ -203,7 +203,7 @@ async def test_vocab_without_lists_says_so(db, config):
     async def reply_text(text, **kwargs):
         replies.append(text)
 
-    update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text))
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text), effective_message=SimpleNamespace(reply_text=reply_text))
     await student.cmd_vocab(update, context)
     assert replies == ["Det finns inga glosor att öva på just nu."]
 
@@ -222,3 +222,30 @@ def test_activity_log_names_the_user_and_command(db):
     assert describe_activity(update(7, "/start ABCD1234"), db) == "unknown user 7 ran /start"
     assert describe_activity(update(100, data="s:go"), db) == "Elev (student) pressed button s:go"
     assert describe_activity(update(100, "la casa"), db) is None  # answers stay out of the log
+
+
+def test_edited_messages_do_not_run_commands_or_answers(tmp_path):
+    from telegram import Update, User
+
+    from app.config import load_config
+    from app.main import build_application
+
+    config = load_config(tmp_path / "none.yaml", env={"TELEGRAM_BOT_TOKEN": "123:ABC", "DATA_DIR": str(tmp_path)})
+    application = build_application(config)
+    application.bot_data["app"].db.add_member(1, "Magnus", "parent")
+    with application.bot._unfrozen():  # command matching needs the bot's username, normally fetched at startup
+        application.bot._bot_user = User(123, "StudyBuddy", True, username="studybuddy_bot")
+
+    def make(kind, text):
+        message = {"message_id": 5, "date": 0, "chat": {"id": 1, "type": "private"},
+                   "from": {"id": 1, "is_bot": False, "first_name": "Magnus"}, "text": text}
+        if text.startswith("/"):
+            message["entities"] = [{"type": "bot_command", "offset": 0, "length": len(text.split()[0])}]
+        return Update.de_json({"update_id": 1, kind: message}, application.bot)
+
+    def matches(update):
+        return [h for h in application.handlers[0] if h.check_update(update)]
+
+    assert matches(make("message", "/update"))
+    assert not matches(make("edited_message", "/update"))
+    assert not matches(make("edited_message", "hej"))

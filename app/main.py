@@ -146,9 +146,10 @@ def build_application(config: Config) -> Application:
     application = Application.builder().token(config.telegram_token).post_init(post_init).build()
     application.bot_data["app"] = app
     is_parent, is_student = RoleFilter(db, "parent"), RoleFilter(db, "student")
+    new = filters.UpdateType.MESSAGE  # an edited message must not run a command or count as an answer again
 
     application.add_handler(TypeHandler(Update, log_activity), group=-1)  # runs before the real handlers
-    application.add_handler(CommandHandler("start", parent.cmd_start))
+    application.add_handler(CommandHandler("start", parent.cmd_start, filters=new))
     parent_commands = {
         "invite": parent.cmd_invite, "family": parent.cmd_family, "subjects": parent.cmd_subjects,
         "material": parent.cmd_material, "words": parent.cmd_words, "schedule": parent.cmd_schedule,
@@ -157,16 +158,16 @@ def build_application(config: Config) -> Application:
         "test_models": parent.cmd_test_models,
     }
     for name, callback in parent_commands.items():
-        application.add_handler(CommandHandler(name, callback, filters=is_parent))
+        application.add_handler(CommandHandler(name, callback, filters=new & is_parent))
     for name, callback in {"quiz": student.cmd_quiz, "vocab": student.cmd_vocab, "snooze": student.cmd_snooze, "progress": student.cmd_progress}.items():
-        application.add_handler(CommandHandler(name, callback, filters=is_student))
+        application.add_handler(CommandHandler(name, callback, filters=new & is_student))
 
     application.add_handler(CallbackQueryHandler(parent.on_callback, pattern=r"^p:"))
     application.add_handler(CallbackQueryHandler(student.on_callback, pattern=r"^(s|a|f):"))
-    application.add_handler(MessageHandler(is_parent & (filters.Document.ALL | filters.PHOTO), parent.on_upload))
-    application.add_handler(MessageHandler(is_parent & filters.TEXT & ~filters.COMMAND, parent.on_parent_text))
-    application.add_handler(MessageHandler(is_student & filters.TEXT & ~filters.COMMAND, student.on_text))
-    application.add_handler(MessageHandler(filters.ALL & ~is_parent & ~is_student, on_stranger))
+    application.add_handler(MessageHandler(new & is_parent & (filters.Document.ALL | filters.PHOTO), parent.on_upload))
+    application.add_handler(MessageHandler(new & is_parent & filters.TEXT & ~filters.COMMAND, parent.on_parent_text))
+    application.add_handler(MessageHandler(new & is_student & filters.TEXT & ~filters.COMMAND, student.on_text))
+    application.add_handler(MessageHandler(new & ~is_parent & ~is_student, on_stranger))
     application.add_error_handler(on_error)
     schedule_jobs(application, config)
     return application
