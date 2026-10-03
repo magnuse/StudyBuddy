@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
+from telegram.error import NetworkError
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler,
                           TypeHandler, filters)
 
@@ -102,6 +103,10 @@ async def post_init(application: Application) -> None:
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if isinstance(context.error, NetworkError) and update is None:
+        # Telegram itself had a hiccup while the bot was polling; the library retries on its own.
+        log.warning("Telegram unreachable, retrying: %s", context.error)
+        return
     log.error("Error while handling an update", exc_info=context.error)
 
 

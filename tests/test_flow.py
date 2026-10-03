@@ -278,3 +278,21 @@ async def test_words_shows_a_list_waiting_for_approval(db, config):
                             message=message, answer=noop, edit_message_reply_markup=noop)
     await parent.on_callback(SimpleNamespace(callback_query=query), context)
     assert [v["id"] for v in db.vocab_lists()] == [pending]
+
+
+async def test_polling_network_errors_are_one_warning_line(caplog):
+    import logging
+
+    from telegram.error import BadRequest, NetworkError
+
+    from app.main import on_error
+
+    with caplog.at_level(logging.INFO):
+        await on_error(None, SimpleNamespace(error=NetworkError("Bad Gateway")))
+    assert [r.levelname for r in caplog.records] == ["WARNING"] and "Bad Gateway" in caplog.text
+    assert caplog.records[0].exc_info is None
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        await on_error(SimpleNamespace(), SimpleNamespace(error=BadRequest("broken")))
+    assert [r.levelname for r in caplog.records] == ["ERROR"]
