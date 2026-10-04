@@ -167,8 +167,34 @@ async def _finish(context: ContextTypes.DEFAULT_TYPE, chat_id: int, session: Ses
         text += " Perfekt! 🎉"
     await context.bot.send_message(chat_id, text)
     app.sessions.pop(chat_id, None)
+    await notify_parents(context, _parent_report(app, chat_id, session, finished=True))
     if app.waiting.get(chat_id):
         await _offer_next(context, chat_id)
+
+
+def _student_name(app: AppContext, chat_id: int) -> str:
+    member = app.db.member(chat_id)
+    return member.name if member else str(chat_id)
+
+
+def _parent_report(app: AppContext, chat_id: int, session: Session, finished: bool) -> str:
+    """What the parents see when the student finishes or pauses a round."""
+    right, total = session.score_summary()
+    first: dict[int, Result] = {}
+    for result in session.results:
+        first.setdefault(result.item.card_id, result)
+    missed = [r for r in first.values() if (r.score or 0) < 2]
+    name = html.escape(_student_name(app, chat_id))
+    title = html.escape(session.plan.title)
+    head = (f"📚 {name} är klar med <i>{title}</i>" if finished
+            else f"⏸️ {name} pausade <i>{title}</i> efter {total} av {session.total}")
+    lines = [f"{head}: {right} av {total} rätt på första försöket."]
+    for r in missed[:15]:
+        lines.append(f"{'🟡' if r.score == 1 else '❌'} {r.item.plain_prompt} – svarade <i>{html.escape(r.answer)}</i>, "
+                     f"rätt: <b>{html.escape(r.item.expected[0])}</b>")
+    if len(missed) > 15:
+        lines.append(f"… och {len(missed) - 15} till.")
+    return "\n".join(lines)
 
 
 def _feedback_markup(attempt_id: int | None) -> InlineKeyboardMarkup | None:
@@ -237,6 +263,9 @@ async def _record_and_reply(context, chat_id: int, session: Session, result: Res
     app = app_of(context)
     result.score, result.feedback = grade.score, grade.feedback
     result.attempt_id = app.db.record_attempt(result.item.card_id, result.answer, grade.score, grade.feedback)
+    log.info("Answer from %s: %s | answered %r | expected %r | %s", _student_name(app, chat_id),
+             html.unescape(result.item.plain_prompt), result.answer, result.item.expected[0],
+             {2: "right", 1: "almost"}.get(grade.score, "wrong"))
     if grade.score < 2:
         session.requeue_missed(result.item)
     prefix = ""
@@ -276,6 +305,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if session:
             session.started = False
         await query.message.reply_text("Pausat. Skriv /quiz när du vill fortsätta.")
+        if session and session.results:
+            await notify_parents(context, _parent_report(app, chat_id, session, finished=False))
     elif data.startswith("a:") and session and session.current and session.current.kind == "mc":
         option = session.current.options[int(data[2:])]
         await query.edit_message_reply_markup(None)

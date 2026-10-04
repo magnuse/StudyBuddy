@@ -296,3 +296,31 @@ async def test_polling_network_errors_are_one_warning_line(caplog):
     with caplog.at_level(logging.INFO):
         await on_error(SimpleNamespace(), SimpleNamespace(error=BadRequest("broken")))
     assert [r.levelname for r in caplog.records] == ["ERROR"]
+
+
+async def test_parents_get_a_report_and_answers_are_logged(db, config, caplog):
+    import logging
+
+    db.add_member(1, "Magnus", "parent")
+    db.add_member(100, "Elev", "student")
+    subject = db.ensure_subject("Spanska", "es")
+    list_id = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 28), date(2026, 10, 6))
+    db.add_word(list_id, "la canción", "sången", [], [])
+    db.add_word(list_id, "el perro", "hunden", [], [])
+    db.approve_vocab_list(list_id)
+    context, app = make_context(db, config)
+
+    plans = plan_slot("evening", db, config, datetime(2026, 9, 30, 19, 0), random.Random(1))  # day 1: typed
+    await student.offer_plans(context, 100, plans)
+    session = app.sessions[100]
+    session.started = True
+    await student._ask(context, 100, session)
+    answers = {"sången": "la canción", "la canción": "sången", "hunden": "el gato", "el perro": "katten"}
+    with caplog.at_level(logging.INFO):
+        while 100 in app.sessions and app.sessions[100].current:
+            word = session.current.prompt.split("<b>")[1].split("</b>")[0]
+            await student.handle_answer(context, 100, answers[word])  # missed words come back, wrong again
+    assert "Answer from Elev: Översätt till svenska: el perro | answered 'katten' | expected 'hunden' | wrong" in caplog.text
+    report = [t for chat, t, _ in context.bot.sent if chat == 1]
+    assert len(report) == 1 and report[0].startswith("📚 Elev är klar med")
+    assert "2 av 4 rätt" in report[0] and "svarade <i>katten</i>" in report[0]
