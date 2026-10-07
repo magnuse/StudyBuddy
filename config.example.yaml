@@ -25,6 +25,7 @@ vocabulary:
   test_day: tuesday             # of the following week, 8 days per list
   reminder: "15:00"
   words_per_round: 10
+  max_questions: 25             # per session, repeats of missed words included
   strict_accents: false         # a missing accent counts as almost right
 
 llm:

@@ -124,10 +124,10 @@ async def test_parent_removes_a_word_list_from_words(db, config):
     db.add_member(1, "Magnus", "parent")
     db.add_member(100, "Elev", "student")
     subject = db.ensure_subject("Spanska", "es")
-    keep = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2026, 10, 6))
+    keep = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2099, 10, 6))  # /words hides lists whose test has passed
     db.add_word(keep, "el coche", "bilen", [], [])
     db.approve_vocab_list(keep)
-    broken = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2026, 10, 6))
+    broken = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2099, 10, 6))  # /words hides lists whose test has passed
     db.add_word(broken, "la casa", "huset", [], [])
     db.approve_vocab_list(broken)
     card = db.list_cards(broken)[0]
@@ -167,7 +167,7 @@ async def test_parent_removes_a_word_list_from_words(db, config):
 async def test_student_starts_a_vocab_round_himself(db, config):
     db.add_member(100, "Elev", "student")
     subject = db.ensure_subject("Spanska", "es")
-    list_id = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2026, 10, 6))
+    list_id = db.create_vocab_list(subject["id"], "v40", date(2026, 9, 30), date(2099, 10, 6))
     for i in range(12):
         db.add_word(list_id, f"palabra{i}", f"ord{i}", [], [])
     db.approve_vocab_list(list_id)
@@ -181,10 +181,11 @@ async def test_student_starts_a_vocab_round_himself(db, config):
     await student.cmd_vocab(update, context)
     session = app.sessions[100]
     assert session.started and session.plan.mode == "intro" and len(session.queue) + 1 == 12
-    assert "12 ord" in replies[-1] and session.current.kind == "mc"
+    texts = [t for _, t, _ in context.bot.sent]
+    assert "12 ord" in texts[-2] and session.current.kind == "mc"
 
     await student.cmd_vocab(update, context)  # a round is already running
-    assert "pågående" in replies[-1]
+    assert "pågående" in context.bot.sent[-1][1]
 
     app.sessions.pop(100)
     card = db.list_cards(list_id)[0]
@@ -192,7 +193,7 @@ async def test_student_starts_a_vocab_round_himself(db, config):
     await student.cmd_vocab(update, context)
     session = app.sessions[100]
     assert session.plan.mode == "typed" and session.plan.card_ids[0] == card["id"]
-    assert len(session.plan.card_ids) == 2 * config.vocabulary["words_per_round"]
+    assert len(session.plan.card_ids) == 20  # 25 questions with room for 5 repeats
 
 
 async def test_vocab_without_lists_says_so(db, config):
@@ -205,7 +206,7 @@ async def test_vocab_without_lists_says_so(db, config):
 
     update = SimpleNamespace(effective_chat=SimpleNamespace(id=100), message=SimpleNamespace(reply_text=reply_text), effective_message=SimpleNamespace(reply_text=reply_text))
     await student.cmd_vocab(update, context)
-    assert replies == ["Det finns inga glosor att öva på just nu."]
+    assert [t for _, t, _ in context.bot.sent] == ["Det finns inga glosor att öva på just nu."]
 
 
 def test_activity_log_names_the_user_and_command(db):
@@ -324,3 +325,40 @@ async def test_parents_get_a_report_and_answers_are_logged(db, config, caplog):
     report = [t for chat, t, _ in context.bot.sent if chat == 1]
     assert len(report) == 1 and report[0].startswith("📚 Elev är klar med")
     assert "2 av 4 rätt" in report[0] and "svarade <i>katten</i>" in report[0]
+
+
+async def test_long_list_round_stops_at_25_questions_and_offers_another(db, config):
+    db.add_member(100, "Elev", "student")
+    subject = db.ensure_subject("Spanska", "es")
+    list_id = db.create_vocab_list(subject["id"], "v41", date(2026, 9, 28), date(2099, 10, 6))
+    for i in range(27):
+        db.add_word(list_id, f"palabra{i}", f"ord{i}", [], [])
+    db.approve_vocab_list(list_id)
+    context, app = make_context(db, config)
+
+    plans = plan_slot("evening", db, config, datetime(2026, 9, 29, 19, 0), random.Random(1))  # day 1: typed
+    await student.offer_plans(context, 100, plans)
+    session = app.sessions[100]
+    session.started = True
+    await student._ask(context, 100, session)
+    asked = 0
+    while 100 in app.sessions:
+        if session.current is None:  # "Runda klar", the student taps Fortsätt
+            await student._ask(context, 100, session)
+            continue
+        asked += 1
+        await student.handle_answer(context, 100, "fel" if asked % 3 else session.current.expected[0])
+    assert asked == 25
+    texts = [t for _, t, markup in context.bot.sent]
+    assert any(t.startswith("🔁 Igen: ") for t in texts)
+    assert not any(t.startswith(("21/", "26/")) for t in texts)  # the counter never passes the total
+    finish = [(t, m) for _, t, m in context.bot.sent if t.startswith("Klart!")][-1]
+    assert finish[1].inline_keyboard[0][0].callback_data == "s:more"
+
+    async def noop(*args):
+        pass
+
+    query = SimpleNamespace(data="s:more", message=SimpleNamespace(chat_id=100), from_user=SimpleNamespace(id=100),
+                            answer=noop, edit_message_reply_markup=noop)
+    await student.on_callback(SimpleNamespace(callback_query=query), context)
+    assert app.sessions[100].started and len(app.sessions[100].plan.card_ids) == 20

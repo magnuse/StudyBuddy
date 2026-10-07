@@ -72,7 +72,8 @@ class Session:
 
     def requeue_missed(self, item: QuizItem) -> None:
         """Missed vocabulary comes back a few questions later in the same session."""
-        if self.is_vocab and item.asked <= MAX_REASKS:
+        room = not self.plan.max_questions or len(self.results) + len(self.queue) < self.plan.max_questions
+        if self.is_vocab and item.asked <= MAX_REASKS and room:
             position = min(len(self.queue), 3)
             self.queue.insert(position, item)
 

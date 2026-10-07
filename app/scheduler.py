@@ -24,6 +24,7 @@ class Plan:
     card_ids: list[int] = field(default_factory=list)
     mode: str = ""  # vocabulary: 'intro', 'typed', 'missed', 'mixed', 'test'
     round_size: int = 0  # vocabulary: words per round (0 = one round)
+    max_questions: int = 0  # vocabulary: questions per session including repeats (0 = no limit)
 
 
 _SWEDISH_HOLIDAYS: dict[int, holiday_calendar.HolidayBase] = {}
@@ -216,10 +217,10 @@ def plan_vocab_now(db: Database, config: Config, now: datetime, rng: random.Rand
     if cards and all(c["seen"] == 0 for c in cards):
         intro = [c for c in cards if c["direction"] == "to_sv"]
         rng.shuffle(intro)
-        return Plan("vocab", label, [c["id"] for c in intro], "intro", per_round)
+        return cap_vocab(Plan("vocab", label, [c["id"] for c in intro], "intro", per_round), config)
     rng.shuffle(cards)
     cards.sort(key=lambda c: (c["box"], c["seen"] == 0, c["correct"] / max(c["seen"], 1)))  # missed words first
-    return Plan("vocab", label, [c["id"] for c in cards[: per_round * 2]], "typed", per_round) if cards else None
+    return cap_vocab(Plan("vocab", label, [c["id"] for c in cards], "typed", per_round), config) if cards else None
 
 
 def plan_warmup(db: Database, config: Config, now: datetime, rng: random.Random) -> list[Plan]:
@@ -253,7 +254,19 @@ def plan_slot(slot: str, db: Database, config: Config, now: datetime, rng: rando
     if slot == "saturday" and now.weekday() != 5:
         return []
     db.close_finished_topics(now.date())
-    return [p for p in PLANNERS[slot](db, config, now, rng) if p.card_ids]
+    return [cap_vocab(p, config) for p in PLANNERS[slot](db, config, now, rng) if p.card_ids]
+
+
+REPEAT_ROOM = 5  # questions kept free for missed words to come back
+
+
+def cap_vocab(plan: Plan, config: Config) -> Plan:
+    """Keeps a vocabulary session short: new cards up to the limit minus room for repeats."""
+    limit = config.vocabulary.get("max_questions") or 0
+    if plan.kind == "vocab" and limit:
+        plan.max_questions = limit
+        plan.card_ids = plan.card_ids[: max(1, limit - REPEAT_ROOM)]
+    return plan
 
 
 def next_weekday(today: date, name: str) -> date:

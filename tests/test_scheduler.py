@@ -71,7 +71,7 @@ def test_spanish_cycle_monday_practice_test_then_new_list_on_tuesday(db, config)
     assert {db.card(c)["item_id"] for c in tuesday[0].card_ids} == {w["id"] for w in db.words(new)}
 
     wednesday = plan_slot("evening", db, config, at(WED, 19), random.Random(1))
-    assert wednesday[0].mode == "typed" and len(wednesday[0].card_ids) == 24
+    assert wednesday[0].mode == "typed" and len(wednesday[0].card_ids) == 20  # capped, room for repeats
 
 
 def test_tuesday_morning_warmup_before_word_test(db, config):
@@ -119,4 +119,6 @@ def test_list_sent_as_two_parts_starts_the_same_evening(db, config):
     make_words(db, date(2026, 9, 30), date(2026, 10, 6), count=30)
     plans = plan_slot("evening", db, config, datetime(2026, 9, 30, 19, 0), random.Random(1))
     assert len(plans) == 1 and plans[0].mode == "intro"
-    assert len(plans[0].card_ids) == 32  # one to_sv card per word, both parts
+    cards = [db.card(c) for c in plans[0].card_ids]
+    assert len(cards) == 20 and all(c["direction"] == "to_sv" for c in cards)  # capped at 25 minus repeats
+    assert {db.one("SELECT list_id FROM vocab_words WHERE id = ?", (c["item_id"],))["list_id"] for c in cards} == {1, 2}

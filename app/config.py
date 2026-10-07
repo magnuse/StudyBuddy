@@ -31,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
         "test_day": "tuesday",
         "reminder": "15:00",
         "words_per_round": 10,
+        "max_questions": 25,  # per session, repeats of missed words included
         "strict_accents": False,
     },
     "llm": {

@@ -144,8 +144,11 @@ async def _ask(context: ContextTypes.DEFAULT_TYPE, chat_id: int, session: Sessio
     if item is None:
         await _finish(context, chat_id, session)
         return
-    done = len({r.item.card_id for r in session.results})
-    header = f"{done + 1}/{session.total}. "
+    if item.asked > 1:
+        header = "🔁 Igen: "  # a missed word coming back does not move the counter
+    else:
+        done = len({r.item.card_id for r in session.results})
+        header = f"{done + 1}/{session.total}. "
     markup = None
     if item.kind == "mc":
         markup = InlineKeyboardMarkup([[InlineKeyboardButton(opt, callback_data=f"a:{index}")]
@@ -165,7 +168,11 @@ async def _finish(context: ContextTypes.DEFAULT_TYPE, chat_id: int, session: Ses
     text = f"Klart! ✅ {right} av {total} rätt på första försöket. +{points} poäng."
     if total and right == total:
         text += " Perfekt! 🎉"
-    await context.bot.send_message(chat_id, text)
+    more = None
+    if session.is_vocab:
+        text += "\nVill du köra en runda till?"
+        more = InlineKeyboardMarkup([[InlineKeyboardButton("En runda till", callback_data="s:more")]])
+    await context.bot.send_message(chat_id, text, reply_markup=more)
     app.sessions.pop(chat_id, None)
     await notify_parents(context, _parent_report(app, chat_id, session, finished=True))
     if app.waiting.get(chat_id):
@@ -300,6 +307,9 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     elif data == "s:snooze":
         await query.edit_message_reply_markup(None)
         await snooze(context, chat_id)
+    elif data == "s:more":
+        await query.edit_message_reply_markup(None)
+        await start_vocab_round(context, chat_id)
     elif data == "s:pause":
         await query.edit_message_reply_markup(None)
         if session:
@@ -362,22 +372,25 @@ async def cmd_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_vocab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Starts a vocabulary round right away, whatever the schedule says."""
+    await start_vocab_round(context, update.effective_chat.id)
+
+
+async def start_vocab_round(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
     app = app_of(context)
-    chat_id = update.effective_chat.id
     session = app.sessions.get(chat_id)
     if session is not None and session.started:
-        await update.effective_message.reply_text("Gör klart den pågående rundan först, sen kan du köra glosor.")
+        await context.bot.send_message(chat_id, "Gör klart den pågående rundan först, sen kan du köra glosor.")
         return
     plan = plan_vocab_now(app.db, app.config, datetime.now(), app.rng)
     if plan is None:
-        await update.effective_message.reply_text("Det finns inga glosor att öva på just nu.")
+        await context.bot.send_message(chat_id, "Det finns inga glosor att öva på just nu.")
         return
     if session is not None:
         app.waiting.setdefault(chat_id, []).insert(0, session.plan)  # offered batch comes back afterwards
     session = build_session(app.db, plan, app.rng)
     session.started = True
     app.sessions[chat_id] = session
-    await update.effective_message.reply_text(_intro_text(plan, len(session.queue)), parse_mode=ParseMode.HTML)
+    await context.bot.send_message(chat_id, _intro_text(plan, len(session.queue)), parse_mode=ParseMode.HTML)
     await _ask(context, chat_id, session)
 
 
