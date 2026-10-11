@@ -34,6 +34,7 @@ llm:
       type: ollama
       base_url: http://ollama:11434
       model: gemma3:12b
+      max_context: 16384        # tokens; lower it if the server runs short of RAM
     grader:                     # local backup for grading
       type: ollama
       base_url: http://ollama:11434

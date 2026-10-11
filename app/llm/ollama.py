@@ -6,14 +6,22 @@ import json
 
 import httpx
 
-from .base import LLMError, LLMProvider
+from .base import LLMError, LLMOutputError, LLMProvider
 
 
 class OllamaProvider(LLMProvider):
-    def __init__(self, name: str, model: str, base_url: str = "http://localhost:11434", timeout: float = 600.0):
+    def __init__(self, name: str, model: str, base_url: str = "http://localhost:11434", timeout: float = 600.0,
+                 max_context: int = 16384):
         super().__init__(name, model)
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.max_context = max_context
+
+    def context_size(self, system: str, prompt: str, max_tokens: int) -> int:
+        """Room for the prompt and the answer. Ollama's default window is small and silently cuts answers off."""
+        prompt_tokens = (len(system) + len(prompt)) // 3 + 256  # about 3 characters per token in Swedish
+        needed = prompt_tokens + max_tokens
+        return min(self.max_context, -(-needed // 1024) * 1024)
 
     async def complete_json(self, system: str, prompt: str, schema: dict, max_tokens: int = 4000) -> dict:
         body = {
@@ -21,7 +29,8 @@ class OllamaProvider(LLMProvider):
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
             "format": schema,
             "stream": False,
-            "options": {"temperature": 0.2, "num_predict": max_tokens},
+            "options": {"temperature": 0.2, "num_predict": max_tokens,
+                        "num_ctx": self.context_size(system, prompt, max_tokens)},
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -29,10 +38,15 @@ class OllamaProvider(LLMProvider):
                 if response.status_code == 404:
                     raise LLMError(f"{self.name}: {self.missing_model_hint()}")
                 response.raise_for_status()
-            content = response.json()["message"]["content"]
-            return json.loads(content)
-        except (httpx.HTTPError, KeyError, json.JSONDecodeError) as exc:
+            data = response.json()
+            content = data["message"]["content"]
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise LLMError(f"{self.name}: {exc}") from exc
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as exc:
+            cut = " (the answer was cut off at the length limit)" if data.get("done_reason") == "length" else ""
+            raise LLMOutputError(f"{self.name}: invalid JSON{cut}: {exc}") from exc
 
     def missing_model_hint(self) -> str:
         return (f"the model {self.model} is not downloaded in Ollama. "

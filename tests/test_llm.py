@@ -144,3 +144,30 @@ async def test_startup_lists_models_the_config_uses_but_ollama_lacks(monkeypatch
                  "unused": OllamaProvider("unused", "llama3")}
     router = LLMRouter(providers, {"generate_questions": ["writer"], "grade": ["grader"]})
     assert await missing_local_models(SimpleNamespace(router=router)) == ["gemma3:12b"]
+
+
+async def test_ollama_gets_room_for_prompt_and_answer_and_cut_answers_are_retried(monkeypatch):
+    import json
+
+    import httpx
+
+    from app.llm.ollama import OllamaProvider
+
+    bodies = []
+    replies = [{"message": {"content": '{"summary": "x", "questions": [{"prompt'}, "done_reason": "length"},
+               {"message": {"content": '{"summary": "ok", "questions": []}'}, "done_reason": "stop"}]
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=replies.pop(0))
+
+    _fake_ollama(monkeypatch, handler)
+    writer = OllamaProvider("writer", "gemma3:12b")
+    router = LLMRouter({"writer": writer}, {"generate_questions": ["writer"]})
+    schema = {"type": "object", "required": ["summary", "questions"]}
+    result = await router.complete_json("generate_questions", "system", "x" * 12000, schema, 6000)
+    assert result == {"summary": "ok", "questions": []}
+    assert len(bodies) == 2  # the cut-off answer was retried
+    num_ctx = bodies[0]["options"]["num_ctx"]
+    assert 12000 // 3 + 6000 <= num_ctx <= 16384 and num_ctx % 1024 == 0
+    assert writer.context_size("s", "short", 500) == 1024

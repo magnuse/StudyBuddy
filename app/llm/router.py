@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from .anthropic_provider import AnthropicProvider
-from .base import LLMError, LLMProvider
+from .base import LLMError, LLMOutputError, LLMProvider
 from .ollama import OllamaProvider
 from .openai_compat import OpenAICompatibleProvider
 
@@ -68,6 +68,10 @@ class LLMRouter:
             for attempt in (1, 2):  # one retry per provider for malformed output
                 try:
                     result = await provider.complete_json(system, prompt, schema, max_tokens)
+                except LLMOutputError as exc:
+                    errors.append(str(exc))
+                    log.warning("Task %s: %s returned invalid JSON (attempt %d): %s", task, provider.name, attempt, exc)
+                    continue  # a new attempt usually comes out whole
                 except LLMError as exc:
                     errors.append(str(exc))
                     log.warning("Task %s: %s failed (%s)", task, provider.name, exc)

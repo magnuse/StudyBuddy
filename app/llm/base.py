@@ -10,6 +10,10 @@ class LLMError(Exception):
     """A provider failed to return a usable answer."""
 
 
+class LLMOutputError(LLMError):
+    """The provider answered, but the answer was cut off or not valid JSON. Worth one retry."""
+
+
 class LLMProvider(ABC):
     #: True for providers that send data outside the home network.
     is_cloud: bool = False

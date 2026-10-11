@@ -6,7 +6,7 @@ import json
 
 import anthropic
 
-from .base import LLMError, LLMProvider
+from .base import LLMError, LLMOutputError, LLMProvider
 
 
 class AnthropicProvider(LLMProvider):
@@ -56,4 +56,4 @@ class AnthropicProvider(LLMProvider):
         try:
             return json.loads(text)
         except json.JSONDecodeError as exc:
-            raise LLMError(f"{self.name}: invalid JSON") from exc
+            raise LLMOutputError(f"{self.name}: invalid JSON") from exc

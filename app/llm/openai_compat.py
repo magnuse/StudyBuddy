@@ -6,7 +6,7 @@ import json
 
 import httpx
 
-from .base import LLMError, LLMProvider
+from .base import LLMError, LLMOutputError, LLMProvider
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -31,6 +31,9 @@ class OpenAICompatibleProvider(LLMProvider):
                 response = await client.post(f"{self.base_url}/chat/completions", json=body, headers=headers)
                 response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
-        except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError) as exc:
+        except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
             raise LLMError(f"{self.name}: {exc}") from exc
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise LLMOutputError(f"{self.name}: invalid JSON: {exc}") from exc
