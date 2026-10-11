@@ -86,3 +86,61 @@ def test_clean_question_fixes_multiple_choice():
     short = _clean_question({"kind": "mc", "prompt": "P?", "answer": "A", "options": [], "rubric": "", "source_ref": ""})
     assert short.kind == "short" and short.options == []
     assert _clean_question({"kind": "mc", "prompt": "", "answer": "A", "options": [], "rubric": "", "source_ref": ""}) is None
+
+
+def _fake_ollama(monkeypatch, handler):
+    import httpx
+
+    real = httpx.AsyncClient
+
+    def client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+
+
+async def test_ollama_names_a_model_that_is_not_downloaded(monkeypatch):
+    import httpx
+    import pytest
+
+    from app.llm.base import LLMError
+    from app.llm.ollama import OllamaProvider
+
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": "gemma3:4b"}]})
+        return httpx.Response(404, json={"error": "model 'gemma3:12b' not found"})
+
+    _fake_ollama(monkeypatch, handler)
+    writer = OllamaProvider("writer", "gemma3:12b", "http://ollama:11434")
+    with pytest.raises(LLMError, match="gemma3:12b is not downloaded.*ollama pull gemma3:12b"):
+        await writer.complete_json("s", "p", {"type": "object"})
+    assert await writer.model_available() is False
+    assert await OllamaProvider("grader", "gemma3:4b", "http://ollama:11434").model_available() is True
+
+
+async def test_ollama_unreachable_is_not_reported_as_missing(monkeypatch):
+    import httpx
+
+    from app.llm.ollama import OllamaProvider
+
+    def handler(request):
+        raise httpx.ConnectError("down")
+
+    _fake_ollama(monkeypatch, handler)
+    assert await OllamaProvider("writer", "gemma3:12b").model_available() is None
+
+
+async def test_startup_lists_models_the_config_uses_but_ollama_lacks(monkeypatch):
+    import httpx
+    from types import SimpleNamespace
+
+    from app.llm.ollama import OllamaProvider
+    from app.main import missing_local_models
+
+    _fake_ollama(monkeypatch, lambda request: httpx.Response(200, json={"models": [{"name": "gemma3:4b"}]}))
+    providers = {"writer": OllamaProvider("writer", "gemma3:12b"), "grader": OllamaProvider("grader", "gemma3:4b"),
+                 "unused": OllamaProvider("unused", "llama3")}
+    router = LLMRouter(providers, {"generate_questions": ["writer"], "grade": ["grader"]})
+    assert await missing_local_models(SimpleNamespace(router=router)) == ["gemma3:12b"]

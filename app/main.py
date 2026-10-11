@@ -21,6 +21,7 @@ from .config import Config, load_config, parse_time, weekday_index
 from .context import AppContext
 from .db import Database
 from .llm import LLMRouter
+from .llm.ollama import OllamaProvider
 
 log = logging.getLogger("studybuddy")
 TZ = ZoneInfo(os.environ.get("TZ", "Europe/Stockholm"))
@@ -94,12 +95,30 @@ async def post_init(application: Application) -> None:
     elif app.db.get_setting("announced_commit") not in (None, info.commit):
         message = f"🔄 Uppdaterad till {info.version} ({info.commit}): {info.subject}"
     app.db.set_setting("announced_commit", info.commit)
+    missing = await missing_local_models(app)
+    if missing:
+        lines = "\n".join(f"<code>docker exec -it &lt;ollama-container&gt; ollama pull {m}</code>" for m in missing)
+        warning = f"⚠️ Ollama saknar {', '.join(missing)}, så de jobben fungerar inte. Hämta modellerna:\n{lines}"
+        message = f"{message}\n\n{warning}" if message else warning
     if message:
         for member in app.db.members("parent"):
             try:
                 await application.bot.send_message(member.telegram_id, message, parse_mode=ParseMode.HTML)
             except Exception as exc:
                 log.warning("Could not notify %s: %s", member.telegram_id, exc)
+
+
+async def missing_local_models(app: AppContext) -> list[str]:
+    """Ollama models the config uses for some job but that are not downloaded."""
+    used = {name for names in app.router.tasks.values() for name in names}
+    missing = []
+    for name in sorted(used):
+        provider = app.router.providers.get(name)
+        if isinstance(provider, OllamaProvider) and provider.model not in missing:
+            if await provider.model_available() is False:
+                log.warning("Ollama model %s for provider %s is not downloaded", provider.model, name)
+                missing.append(provider.model)
+    return missing
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

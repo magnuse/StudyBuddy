@@ -26,8 +26,26 @@ class OllamaProvider(LLMProvider):
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{self.base_url}/api/chat", json=body)
+                if response.status_code == 404:
+                    raise LLMError(f"{self.name}: {self.missing_model_hint()}")
                 response.raise_for_status()
             content = response.json()["message"]["content"]
             return json.loads(content)
         except (httpx.HTTPError, KeyError, json.JSONDecodeError) as exc:
             raise LLMError(f"{self.name}: {exc}") from exc
+
+    def missing_model_hint(self) -> str:
+        return (f"the model {self.model} is not downloaded in Ollama. "
+                f"Run: docker exec -it <ollama container> ollama pull {self.model}")
+
+    async def model_available(self) -> bool | None:
+        """True if Ollama has the model, False if not, None if Ollama could not be reached."""
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                response.raise_for_status()
+            names = {m.get("name") for m in response.json().get("models", [])}
+        except (httpx.HTTPError, ValueError):
+            return None
+        wanted = self.model if ":" in self.model else f"{self.model}:latest"
+        return wanted in names
