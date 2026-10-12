@@ -22,6 +22,7 @@ from .context import AppContext
 from .db import Database
 from .llm import LLMRouter
 from .llm.ollama import OllamaProvider
+from .web import start_web
 
 log = logging.getLogger("studybuddy")
 TZ = ZoneInfo(os.environ.get("TZ", "Europe/Stockholm"))
@@ -204,6 +205,7 @@ def main() -> None:
     if not config.telegram_token:
         raise SystemExit("TELEGRAM_BOT_TOKEN is not set")
     application = build_application(config)
+    start_web(config.db_path, int(os.environ.get("WEB_PORT", "8080")), os.environ.get("WEB_PASSWORD") or None)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

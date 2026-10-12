@@ -38,6 +38,10 @@ Parents add material by sending a PDF, Word file, photo or text to the bot. Put 
 7. **Models.** Pull the local models: `docker exec -it <ollama container> ollama pull gemma3:12b` and `ollama pull gemma3:4b`. Try `/test_models` to compare speed and quality.
 8. **Family.** Send `/start` to the bot. Then `/invite parent` for the other parent and `/invite student` for your son, and add subjects with `/subjects add Spanska`, `/subjects add SO` and so on.
 
+## Web page
+
+The bot also serves a read-only page with the word lists, topics with every question and answer key, and all of the student's answers: `http://<server>:8765`. Add `ports: ["8765:8080"]` to the bot service if your compose file predates it. Set `WEB_PASSWORD` in `.env` to require a password, and `WEB_PORT=0` to turn the page off. Keep the port inside the home network.
+
 ## Updates
 
 `entrypoint.sh` runs at every container start:

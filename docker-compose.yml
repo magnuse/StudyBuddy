@@ -11,6 +11,8 @@ services:
       - /mnt/user/appdata/studybuddy/code:/app/code        # pulled code + Python packages
       - /mnt/user/appdata/studybuddy/deploy_key:/run/deploy_key:ro
       - /mnt/user/appdata/studybuddy/config.yaml:/app/config.yaml:ro
+    ports:
+      - "8765:8080"               # read-only web page: http://<server>:8765
     restart: unless-stopped       # a restart is also how it updates
     depends_on: [ollama]
 
