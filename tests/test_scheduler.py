@@ -136,7 +136,7 @@ def test_vocab_tests_target_twenty_questions_even_with_short_list(db, config):
 
 def test_short_period_skips_intro_and_increases_questions(db, config):
     # 4 days left (< 5 days): skip intro / easy choices and ask more questions per session
-    make_words(db, THU, date(2026, 10, 5), count=12)
+    make_words(db, THU, date(2026, 10, 5), count=15)
     plans = plan_slot("evening", db, config, at(THU, 19), random.Random(1))
     assert len(plans) == 1
     assert plans[0].mode == "typed"
@@ -157,13 +157,13 @@ def test_five_or_more_days_uses_slow_start(db, config):
     plans = plan_slot("evening", db, config, at(WED, 19), random.Random(1))
     assert len(plans) == 1
     assert plans[0].mode == "intro"
-    assert len(plans[0].card_ids) == 20
+    assert len(plans[0].card_ids) == 12
     assert plans[0].max_questions == 25
 
 
 def test_delayed_first_session_with_short_time_left_skips_intro(db, config):
     # List started 8 days before test, but student starts first session only 4 days before test
-    make_words(db, MON, date(2026, 10, 6), count=12)
+    make_words(db, MON, date(2026, 10, 6), count=15)
     now_plan = plan_vocab_now(db, config, at(FRI, 19), random.Random(1))
     assert now_plan is not None and now_plan.mode == "typed"
     assert len(now_plan.card_ids) == 30 and now_plan.max_questions == 35

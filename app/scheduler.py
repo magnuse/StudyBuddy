@@ -276,15 +276,6 @@ def _fill_cards(
         if len(chosen) >= target:
             return chosen[:target]
 
-    # 5. If still below target, repeat cards from chosen
-    if chosen and len(chosen) < target:
-        pool = list(chosen)
-        rng.shuffle(pool)
-        idx = 0
-        while len(chosen) < target:
-            chosen.append(pool[idx % len(pool)])
-            idx += 1
-
     return chosen[:target]
 
 
@@ -327,8 +318,7 @@ def plan_evening(db: Database, config: Config, now: datetime, rng: random.Random
             card_ids = _fill_cards(db, [c["id"] for c in cards], learning, now, rng, target=target)
             return [Plan("vocab", label, card_ids, "typed", per_round, max_q)]
         cards = _cards(db, learning, "to_sv")
-        card_ids = _fill_cards(db, [c["id"] for c in cards], learning, now, rng, target=target)
-        return [Plan("vocab", label, card_ids, "intro", per_round, max_q)]
+        return [Plan("vocab", label, [c["id"] for c in cards], "intro", per_round, max_q)]
     if day == 1:
         cards = list(all_cards)
         rng.shuffle(cards)
@@ -362,8 +352,7 @@ def plan_vocab_now(db: Database, config: Config, now: datetime, rng: random.Rand
     if first_session and not short:
         intro = [c for c in cards if c["direction"] == "to_sv"]
         rng.shuffle(intro)
-        card_ids = _fill_cards(db, [c["id"] for c in intro], row, now, rng, target=target)
-        return cap_vocab(Plan("vocab", label, card_ids, "intro", per_round, max_q), config)
+        return cap_vocab(Plan("vocab", label, [c["id"] for c in intro], "intro", per_round, max_q), config)
     rng.shuffle(cards)
     cards.sort(key=lambda c: (c["box"], c["seen"] == 0, c["correct"] / max(c["seen"], 1)))  # missed words first
     card_ids = _fill_cards(db, [c["id"] for c in cards], row, now, rng, target=target)
