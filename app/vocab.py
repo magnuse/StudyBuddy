@@ -34,8 +34,6 @@ SPANISH_GENDER_NOUNS = {
     "vecino": "vecina", "vecinos": "vecinas",
     "maestro": "maestra", "maestros": "maestras",
     "alumno": "alumna", "alumnos": "alumnas",
-    "perro": "perra", "perros": "perras",
-    "gato": "gata", "gatos": "gatas",
     "médico": "médica", "médicos": "médicas",
     "abogado": "abogada", "abogados": "abogadas",
     "secretario": "secretaria", "secretarios": "secretarias",
