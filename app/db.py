@@ -130,9 +130,10 @@ class Database:
         self.path = str(path)
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path, check_same_thread=False)
+        self.conn = sqlite3.connect(self.path, timeout=30.0, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.execute("PRAGMA journal_mode = WAL")
 
     # ---- schema -----------------------------------------------------------
     def migrate(self) -> int:
@@ -329,11 +330,12 @@ class Database:
         card_ids = [r["id"] for r in self.q(
             "SELECT c.id FROM cards c JOIN vocab_words w ON w.id = c.item_id WHERE c.item_type = 'w' AND w.list_id = ?",
             (list_id,))]
-        for card_id in card_ids:
-            self.run("DELETE FROM attempts WHERE card_id = ?", (card_id,))
-            self.run("DELETE FROM cards WHERE id = ?", (card_id,))
-        self.run("DELETE FROM vocab_words WHERE list_id = ?", (list_id,))
-        self.run("DELETE FROM vocab_lists WHERE id = ?", (list_id,))
+        with self.conn:
+            for card_id in card_ids:
+                self.conn.execute("DELETE FROM attempts WHERE card_id = ?", (card_id,))
+                self.conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+            self.conn.execute("DELETE FROM vocab_words WHERE list_id = ?", (list_id,))
+            self.conn.execute("DELETE FROM vocab_lists WHERE id = ?", (list_id,))
         return card_ids
 
     def approve_vocab_list(self, list_id: int) -> int:

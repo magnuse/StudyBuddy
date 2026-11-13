@@ -12,8 +12,8 @@ from .base import LLMError, LLMOutputError, LLMProvider
 class AnthropicProvider(LLMProvider):
     is_cloud = True
 
-    def __init__(self, name: str, model: str = "claude-opus-5", api_key: str | None = None,
-                 refusal_fallback: bool = True, timeout: float = 120.0):
+    def __init__(self, name: str, model: str = "claude-3-5-sonnet-latest", api_key: str | None = None,
+                 refusal_fallback: bool = False, timeout: float = 120.0):
         super().__init__(name, model)
         self.api_key = api_key
         self.timeout = timeout

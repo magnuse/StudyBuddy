@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import time as dtime
+from datetime import time as dtime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,10 @@ from .llm.ollama import OllamaProvider
 from .web import start_web
 
 log = logging.getLogger("studybuddy")
-TZ = ZoneInfo(os.environ.get("TZ", "Europe/Stockholm"))
+try:
+    TZ = ZoneInfo(os.environ.get("TZ", "Europe/Stockholm"))
+except Exception:
+    TZ = timezone.utc
 ALL_DAYS = (0, 1, 2, 3, 4, 5, 6)  # python-telegram-bot: 0 = Sunday … 6 = Saturday
 
 PARENT_COMMANDS = [

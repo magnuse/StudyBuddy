@@ -35,7 +35,7 @@ def parse_date(text: str, today: date) -> date | None:
         return _future(int(match[1]), int(match[2]), today)
     for name, index in WEEKDAYS_SV.items():
         if re.search(rf"\b{name}\b", text):
-            days = (index - today.weekday()) % 7
+            days = (index - today.weekday()) % 7 or 7
             return today + timedelta(days=days)
     return None
 

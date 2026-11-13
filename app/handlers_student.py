@@ -158,6 +158,9 @@ async def _ask(context: ContextTypes.DEFAULT_TYPE, chat_id: int, session: Sessio
 
 
 async def _finish(context: ContextTypes.DEFAULT_TYPE, chat_id: int, session: Session) -> None:
+    if session.finishing:
+        return
+    session.finishing = True
     app = app_of(context)
     for _ in range(120):  # wait for background grading, at most about two minutes
         if session.pending_grades == 0:
@@ -216,6 +219,8 @@ async def _grade_typed(app: AppContext, item: QuizItem, answer: str, prompt_word
         return Grade(2, "Rätt!")
     if result.verdict == Verdict.ALMOST:
         return Grade(2, "Nästan! " + REASON_TEXT[result.reason].format(expected=html.escape(result.expected)))
+    if result.verdict == Verdict.WRONG and result.reason == "gender":
+        return Grade(0, f"Fel genus! Rätt svar: <b>{html.escape(result.expected)}</b>")
     try:
         return await check_synonym(app.router, prompt_word, item.expected[0], answer, item.language or "sv")
     except LLMError as exc:
@@ -241,6 +246,10 @@ async def handle_answer(context: ContextTypes.DEFAULT_TYPE, chat_id: int, answer
     elif item.kind == "typed":
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         prompt_word = html.unescape(item.prompt.split("<b>")[-1].replace("</b>", ""))
+        if "(femininum)" in item.prompt:
+            prompt_word += " (femininum)"
+        elif "(maskulinum)" in item.prompt:
+            prompt_word += " (maskulinum)"
         grade = await _grade_typed(app, item, answer, prompt_word)
         await _record_and_reply(context, chat_id, session, result, grade, show_flag=grade.score < 2)
     else:

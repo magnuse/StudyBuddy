@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import logging
@@ -197,7 +198,7 @@ async def on_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await message.reply_text(f"Kunde inte läsa filen: {exc}")
         return
 
-    caption_text = message.caption if (message.document or message.photo) else None
+    caption_text = message.caption or (message.document.file_name if message.document else None)
     if message.text and not caption_text:
         # For pasted text the first line may be the caption, e.g. "Spanska glosor".
         first, _, rest = message.text.partition("\n")
@@ -250,7 +251,7 @@ async def _confirm_upload(update: Update, context: ContextTypes.DEFAULT_TYPE, up
     today = date.today()
     upload.test_date = upload.test_date or _default_test_date(app, upload, today)
     message = update.effective_message
-    when = upload.test_date.strftime("%-d/%-m")
+    when = f"{upload.test_date.day}/{upload.test_date.month}"
     if upload.is_word_list:
         text = f"Glosor i <b>{html.escape(upload.subject)}</b>, glosförhör {when}. Stämmer det?"
     else:
@@ -347,16 +348,29 @@ async def send_topic_review(context: ContextTypes.DEFAULT_TYPE, topic_id: int, c
     topic = app.db.topic(topic_id)
     lines = _question_lines(app, topic_id)
     summary = html.escape((topic["summary"] or "")[:900])
-    text = (f"📚 <b>{html.escape(topic['subject'])}: {html.escape(topic['title'])}</b>\n\n{summary}\n\n"
-            f"<b>{len(lines)} frågor:</b>\n" + "\n".join(lines))
+    header = (f"📚 <b>{html.escape(topic['subject'])}: {html.escape(topic['title'])}</b>\n\n{summary}\n\n"
+              f"<b>{len(lines)} frågor:</b>")
     buttons = InlineKeyboardMarkup([[
         InlineKeyboardButton("Godkänn alla", callback_data=f"p:tq:ok:{topic_id}"),
         InlineKeyboardButton("Ta bort frågor…", callback_data=f"p:tq:rm:{topic_id}"),
     ]])
-    for chunk_start in range(0, len(text), 3900):
-        chunk = text[chunk_start:chunk_start + 3900]
-        last = chunk_start + 3900 >= len(text)
-        targets = chat_ids or [m.telegram_id for m in app.db.members("parent")]
+    chunks = []
+    current_chunk = [header]
+    current_len = len(header)
+    for line in lines:
+        if current_len + len(line) + 1 > 3800:
+            chunks.append("\n".join(current_chunk))
+            current_chunk = [line]
+            current_len = len(line)
+        else:
+            current_chunk.append(line)
+            current_len += len(line) + 1
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+
+    targets = chat_ids or [m.telegram_id for m in app.db.members("parent")]
+    for index, chunk in enumerate(chunks):
+        last = (index == len(chunks) - 1)
         for chat_id in targets:
             await context.bot.send_message(chat_id, chunk, parse_mode=ParseMode.HTML, reply_markup=buttons if last else None)
 
@@ -659,7 +673,7 @@ async def check_for_update(context: ContextTypes.DEFAULT_TYPE, forced_by: Update
     app = app_of(context)
     branch = app.config.raw.get("updates", {}).get("branch") or "stable"
     try:
-        new_commits = updater.update_available(app.config.code_dir, branch, app.state_dir)
+        new_commits = await asyncio.to_thread(updater.update_available, app.config.code_dir, branch, app.state_dir)
     except Exception as exc:
         log.warning("Update check failed: %s", exc)
         if forced_by:

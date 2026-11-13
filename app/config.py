@@ -38,7 +38,7 @@ DEFAULTS: dict[str, Any] = {
         "providers": {
             "writer": {"type": "ollama", "base_url": "http://ollama:11434", "model": "gemma3:12b"},
             "grader": {"type": "ollama", "base_url": "http://ollama:11434", "model": "gemma3:4b"},
-            "cloud": {"type": "anthropic", "model": "claude-opus-5"},
+            "cloud": {"type": "anthropic", "model": "claude-3-5-sonnet-latest"},
         },
         "tasks": {
             "generate_questions": ["writer"],

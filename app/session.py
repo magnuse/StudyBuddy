@@ -10,6 +10,7 @@ from datetime import datetime
 
 from .db import Database
 from .scheduler import Plan
+from .vocab import opposite_gender
 
 MAX_REASKS = 2  # a missed word comes back at most this many times in one session
 
@@ -50,6 +51,7 @@ class Session:
     created_at: datetime = field(default_factory=datetime.now)
     answered_in_round: int = 0
     pending_grades: int = 0
+    finishing: bool = False
 
     @property
     def is_vocab(self) -> bool:
@@ -90,12 +92,32 @@ def _vocab_item(db: Database, card, word, vocab_list, mode: str, rng: random.Ran
     term_forms = [word["term"]] + json.loads(word["term_alts"])
     translation_forms = [word["translation"]] + json.loads(word["translation_alts"])
     language = vocab_list["language"] or "es"
+    lang_name = LANGUAGE_NAMES_SV.get(language, language)
+
     if card["direction"] == "to_sv":
         prompt = f"Översätt till svenska: <b>{html.escape(word['term'])}</b>"
         expected, answer_language = translation_forms, "sv"
+    elif card["direction"] == "from_sv_opp":
+        opp = opposite_gender(word["term"], word["translation"], json.loads(word["term_alts"])) if language == "es" else None
+        if opp:
+            opp_spanish, target_gender, swe_hint = opp
+            prompt = f"Översätt till {lang_name} ({target_gender}): <b>{html.escape(swe_hint or word['translation'])}</b>"
+            expected, answer_language = [opp_spanish], language
+        else:
+            prompt = f"Översätt till {lang_name}: <b>{html.escape(word['translation'])}</b>"
+            expected, answer_language = term_forms, language
     else:
-        prompt = f"Översätt till {LANGUAGE_NAMES_SV.get(language, language)}: <b>{html.escape(word['translation'])}</b>"
-        expected, answer_language = term_forms, language
+        opp = opposite_gender(word["term"], word["translation"], json.loads(word["term_alts"])) if language == "es" else None
+        if opp:
+            opp_spanish, opp_gender, _ = opp
+            curr_gender = "maskulinum" if opp_gender == "femininum" else "femininum"
+            prompt = f"Översätt till {lang_name} ({curr_gender}): <b>{html.escape(word['translation'])}</b>"
+            expected = [t for t in term_forms if t.lower() != opp_spanish.lower()] or [word["term"]]
+            answer_language = language
+        else:
+            prompt = f"Översätt till {lang_name}: <b>{html.escape(word['translation'])}</b>"
+            expected, answer_language = term_forms, language
+
     if mode == "intro":
         others = [w for w in db.words(vocab_list["id"]) if w["id"] != word["id"]]
         rng.shuffle(others)

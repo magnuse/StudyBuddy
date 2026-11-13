@@ -2,7 +2,7 @@ import json
 import random
 from datetime import date, datetime, timedelta
 
-from app.scheduler import is_day_off, plan_slot
+from app.scheduler import is_day_off, plan_slot, plan_vocab_now
 from app.session import build_session
 
 MON, TUE, WED, THU, FRI, SAT = (date(2026, 9, 28) + timedelta(days=i) for i in range(6))
@@ -122,3 +122,85 @@ def test_list_sent_as_two_parts_starts_the_same_evening(db, config):
     cards = [db.card(c) for c in plans[0].card_ids]
     assert len(cards) == 20 and all(c["direction"] == "to_sv" for c in cards)  # capped at 25 minus repeats
     assert {db.one("SELECT list_id FROM vocab_words WHERE id = ?", (c["item_id"],))["list_id"] for c in cards} == {1, 2}
+
+
+def test_vocab_tests_target_twenty_questions_even_with_short_list(db, config):
+    # A list of only 10 words (>= 6 days total) should still produce 20 questions on review and practice test days
+    make_words(db, date(2026, 9, 21), TUE, count=10)
+    # Practice test Monday evening before Tuesday test:
+    plans = plan_slot("evening", db, config, at(MON, 19), random.Random(1))
+    assert len(plans) == 1
+    assert len(plans[0].card_ids) == 20
+    assert plans[0].max_questions == 25  # room for up to 5 repeats (total 20-25 questions)
+
+
+def test_short_period_skips_intro_and_increases_questions(db, config):
+    # 4 days left (< 5 days): skip intro / easy choices and ask more questions per session
+    make_words(db, THU, date(2026, 10, 5), count=12)
+    plans = plan_slot("evening", db, config, at(THU, 19), random.Random(1))
+    assert len(plans) == 1
+    assert plans[0].mode == "typed"
+    assert len(plans[0].card_ids) == 30
+    assert plans[0].max_questions == 35
+
+    session = build_session(db, plans[0], random.Random(1))
+    assert all(item.kind == "typed" for item in session.queue)
+
+    now_plan = plan_vocab_now(db, config, at(THU, 19), random.Random(1))
+    assert now_plan is not None and now_plan.mode == "typed"
+    assert len(now_plan.card_ids) == 30 and now_plan.max_questions == 35
+
+
+def test_five_or_more_days_uses_slow_start(db, config):
+    # Exactly 5 days left (>= 5 days): use slow start (intro with mc) and normal question count
+    make_words(db, WED, date(2026, 10, 5), count=12)
+    plans = plan_slot("evening", db, config, at(WED, 19), random.Random(1))
+    assert len(plans) == 1
+    assert plans[0].mode == "intro"
+    assert len(plans[0].card_ids) == 20
+    assert plans[0].max_questions == 25
+
+
+def test_delayed_first_session_with_short_time_left_skips_intro(db, config):
+    # List started 8 days before test, but student starts first session only 4 days before test
+    make_words(db, MON, date(2026, 10, 6), count=12)
+    now_plan = plan_vocab_now(db, config, at(FRI, 19), random.Random(1))
+    assert now_plan is not None and now_plan.mode == "typed"
+    assert len(now_plan.card_ids) == 30 and now_plan.max_questions == 35
+
+
+def test_opposite_gender_cards_tested_with_hints(db, config):
+    subject = db.ensure_subject("Spanska", "es")
+    l1 = db.create_vocab_list(subject["id"], "v40", MON, date(2026, 10, 6))
+    db.add_word(l1, "el chico", "pojke", [], [])
+    db.add_word(l1, "cansado", "trött", ["cansada"], [])
+    db.add_word(l1, "la mesa", "bordet", [], [])
+    db.approve_vocab_list(l1)
+
+    plans = plan_slot("evening", db, config, at(MON + timedelta(days=2), 19), random.Random(1))
+    assert len(plans) == 1
+    session = build_session(db, plans[0], random.Random(1))
+    prompts = [item.prompt for item in session.queue]
+    # Check that opposite gender and hint parentheticals are used
+    assert any("femininum" in p for p in prompts)
+    assert any("maskulinum" in p for p in prompts)
+
+
+def test_failed_cards_retested_in_review(db, config):
+    subject = db.ensure_subject("Spanska", "es")
+    l1 = db.create_vocab_list(subject["id"], "v40", MON, date(2026, 10, 6))
+    w1 = db.add_word(l1, "el perro", "hunden", [], [])
+    for i in range(9):
+        db.add_word(l1, f"palabra{i}", f"ord{i}", [], [])
+    db.approve_vocab_list(l1)
+
+    # Fail the card for w1
+    card = db.one("SELECT id FROM cards WHERE item_id = ? AND direction = 'from_sv'", (w1,))
+    db.record_attempt(card["id"], "fel", 0, "Fel", at(TUE, 19))
+
+    # Day 2 (Wednesday) evening review plan
+    plans = plan_slot("evening", db, config, at(WED, 19), random.Random(1))
+    assert len(plans) == 1
+    assert len(plans[0].card_ids) == 20
+    assert card["id"] in plans[0].card_ids
+

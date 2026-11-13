@@ -59,7 +59,7 @@ def _docx(data: bytes) -> str:
 
 
 def _ocr(data: bytes) -> str:
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     try:
         import pillow_heif
@@ -73,6 +73,7 @@ def _ocr(data: bytes) -> str:
         raise UnsupportedFile("Bildläsning (OCR) är inte installerad på servern.") from exc
 
     image = Image.open(io.BytesIO(data))
+    image = ImageOps.exif_transpose(image) or image
     image = image.convert("L")  # greyscale reads better
     text = pytesseract.image_to_string(image, lang=OCR_LANGUAGES)
     if not text.strip():

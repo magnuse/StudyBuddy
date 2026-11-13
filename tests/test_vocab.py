@@ -1,4 +1,4 @@
-from app.vocab import Verdict, check_answer, parse_word_list
+from app.vocab import Verdict, check_answer, expand_slashes, opposite_gender, parse_word_list
 
 
 def test_parse_common_formats():
@@ -54,3 +54,36 @@ def test_small_typo_is_almost():
 def test_different_word_is_wrong():
     result = check_answer("el perro", ["la casa"], "es")
     assert result.verdict == Verdict.WRONG and result.score == 0
+
+
+def test_expand_slashes():
+    assert expand_slashes("cansado/a") == ["cansado", "cansada"]
+    assert expand_slashes("el/la amigo/a") == ["el amigo", "la amiga"]
+    assert expand_slashes("el/la profesor/a") == ["el profesor", "la profesora"]
+    assert expand_slashes("un/una chico/a") == ["un chico", "una chica"]
+    assert expand_slashes("la casa") == ["la casa"]
+
+
+def test_opposite_gender_spanish():
+    assert opposite_gender("el chico", "pojke") == ("la chica", "femininum", "flicka")
+    assert opposite_gender("la chica", "flicka") == ("el chico", "maskulinum", "pojke")
+    assert opposite_gender("cansado", "trött") == ("cansada", "femininum", "trött")
+    assert opposite_gender("cansada", "trött") == ("cansado", "maskulinum", "trött")
+    assert opposite_gender("el profesor", "lärare") == ("la profesora", "femininum", "lärare")
+    assert opposite_gender("la mesa", "bordet") is None
+
+
+def test_opposite_gender_treated_as_wrong_not_typo():
+    res = check_answer("chico", ["la chica"], "es")
+    assert res.verdict == Verdict.WRONG and res.reason == "gender"
+
+    res = check_answer("el chico", ["la chica"], "es")
+    assert res.verdict == Verdict.WRONG and res.reason == "gender"
+
+    res = check_answer("cansado", ["cansada"], "es")
+    assert res.verdict == Verdict.WRONG and res.reason == "gender"
+
+    # Real typo (not opposite gender) is still ALMOST typo
+    res = check_answer("la chika", ["la chica"], "es")
+    assert res.verdict == Verdict.ALMOST and res.reason == "typo"
+

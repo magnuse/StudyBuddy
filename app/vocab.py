@@ -17,6 +17,94 @@ ARTICLES = {
 }
 SWEDISH_PREFIXES = ["att", "en", "ett"]
 
+SPANISH_GENDER_NOUNS = {
+    "amigo": "amiga", "amigos": "amigas",
+    "chico": "chica", "chicos": "chicas",
+    "niño": "niña", "niños": "niñas",
+    "muchacho": "muchacha", "muchachos": "muchachas",
+    "hermano": "hermana", "hermanos": "hermanas",
+    "hijo": "hija", "hijos": "hijas",
+    "abuelo": "abuela", "abuelos": "abuelas",
+    "tío": "tía", "tíos": "tías",
+    "primo": "prima", "primos": "primas",
+    "compañero": "compañera", "compañeros": "compañeras",
+    "camarero": "camarera", "camareros": "camareras",
+    "cocinero": "cocinera", "cocineros": "cocineras",
+    "enfermero": "enfermera", "enfermeros": "enfermeras",
+    "vecino": "vecina", "vecinos": "vecinas",
+    "maestro": "maestra", "maestros": "maestras",
+    "alumno": "alumna", "alumnos": "alumnas",
+    "perro": "perra", "perros": "perras",
+    "gato": "gata", "gatos": "gatas",
+    "médico": "médica", "médicos": "médicas",
+    "abogado": "abogada", "abogados": "abogadas",
+    "secretario": "secretaria", "secretarios": "secretarias",
+    "profesor": "profesora", "profesores": "profesoras",
+    "doctor": "doctora", "doctores": "doctoras",
+    "director": "directora", "directores": "directoras",
+    "señor": "señora", "señores": "señoras",
+    "escritor": "escritora", "escritores": "escritoras",
+    "jugador": "jugadora", "jugadores": "jugadoras",
+    "padre": "madre", "padres": "madres",
+    "hombre": "mujer", "hombres": "mujeres",
+    "rey": "reina", "reyes": "reinas",
+}
+
+SPANISH_GENDER_ADJECTIVES = {
+    "alto": "alta", "altos": "altas",
+    "bajo": "baja", "bajos": "bajas",
+    "pequeño": "pequeña", "pequeños": "pequeñas",
+    "bonito": "bonita", "bonitos": "bonitas",
+    "guapo": "guapa", "guapos": "guapas",
+    "simpático": "simpática", "simpáticos": "simpáticas",
+    "tranquilo": "tranquila", "tranquilos": "tranquilas",
+    "rápido": "rápida", "rápidos": "rápidas",
+    "lento": "lenta", "lentos": "lentas",
+    "nuevo": "nueva", "nuevos": "nuevas",
+    "viejo": "vieja", "viejos": "viejas",
+    "bueno": "buena", "buenos": "buenas",
+    "malo": "mala", "malos": "malas",
+    "cansado": "cansada", "cansados": "cansadas",
+    "contento": "contenta", "contentos": "contentas",
+    "enfermo": "enferma", "enfermos": "enfermas",
+    "aburrido": "aburrida", "aburridos": "aburridas",
+    "divertido": "divertida", "divertidos": "divertidas",
+    "listo": "lista", "listos": "listas",
+    "rojo": "roja", "rojos": "rojas",
+    "blanco": "blanca", "blancos": "blancas",
+    "negro": "negra", "negros": "negras",
+    "amarillo": "amarilla", "amarillos": "amarillas",
+    "rubio": "rubia", "rubios": "rubias",
+    "frío": "fría", "fríos": "frías",
+    "seco": "seca", "secos": "secas",
+    "limpio": "limpia", "limpios": "limpias",
+    "sucio": "sucia", "sucios": "sucias",
+    "rico": "rica", "ricos": "ricas",
+    "largo": "larga", "largos": "largas",
+    "corto": "corta", "cortos": "cortas",
+    "caro": "cara", "caros": "caras",
+    "barato": "barata", "baratos": "baratas",
+}
+
+ALL_M2F = {**SPANISH_GENDER_NOUNS, **SPANISH_GENDER_ADJECTIVES}
+ALL_F2M = {v: k for k, v in ALL_M2F.items()}
+ARTICLE_M2F = {"el": "la", "los": "las", "un": "una", "unos": "unas"}
+ARTICLE_F2M = {v: k for k, v in ARTICLE_M2F.items()}
+
+SWEDISH_GENDER_PAIRS = {
+    "pojke": "flicka", "pojken": "flickan",
+    "kille": "tjej", "killen": "tjejen",
+    "bror": "syster", "brodern": "systern",
+    "son": "dotter", "sonen": "dottern",
+    "morfar": "mormor", "farfar": "farmor",
+    "farbror": "faster", "morbror": "moster",
+    "man": "kvinna", "mannen": "kvinnan",
+    "pappa": "mamma", "pappan": "mamman",
+    "kung": "drottning", "kungen": "drottningen",
+    "herre": "dam", "herrn": "damen",
+}
+SWE_REV = {v: k for k, v in SWEDISH_GENDER_PAIRS.items()}
+
 
 @dataclass
 class WordPair:
@@ -26,9 +114,92 @@ class WordPair:
     translation_alts: list[str] = field(default_factory=list)
 
 
+def expand_slashes(text: str) -> list[str]:
+    """Expands Spanish gender slash notations like 'el/la amigo/a' or 'cansado/a'."""
+    s = text.strip()
+    m = re.match(r"^(el|la|un|una)/(el|la|un|una)\s+([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]+)o/-?a$", s, re.IGNORECASE)
+    if m:
+        art1, art2, stem = m.groups()
+        return [f"{art1} {stem}o", f"{art2} {stem}a"]
+    m = re.match(r"^(el|la|un|una)/(el|la|un|una)\s+([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]+(?:or|ón|án|ín))/-?a$", s, re.IGNORECASE)
+    if m:
+        art1, art2, stem = m.groups()
+        return [f"{art1} {stem}", f"{art2} {stem}a"]
+    m = re.match(r"^(el|la|un|una)/(el|la|un|una)\s+([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]+)$", s, re.IGNORECASE)
+    if m:
+        art1, art2, noun = m.groups()
+        return [f"{art1} {noun}", f"{art2} {noun}"]
+    m = re.match(r"^([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]+)o/-?a$", s, re.IGNORECASE)
+    if m:
+        stem = m.group(1)
+        return [f"{stem}o", f"{stem}a"]
+    m = re.match(r"^([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]+(?:or|ón|án|ín))/-?a$", s, re.IGNORECASE)
+    if m:
+        stem = m.group(1)
+        return [stem, f"{stem}a"]
+    return [s]
+
+
 def _split_alternatives(text: str) -> list[str]:
+    expanded = expand_slashes(text)
+    if len(expanded) > 1:
+        return expanded
     parts = [p.strip() for p in re.split(r"\s*[/;,]\s*", text) if p.strip()]
-    return parts or [text.strip()]
+    out = []
+    for part in parts:
+        out.extend(expand_slashes(part))
+    return out or [text.strip()]
+
+
+def _swedish_target(translation: str, target_gender: str) -> str:
+    t = translation.strip()
+    if not t:
+        return t
+    low = t.lower()
+    if target_gender == "femininum" and low in SWEDISH_GENDER_PAIRS:
+        return SWEDISH_GENDER_PAIRS[low]
+    if target_gender == "maskulinum" and low in SWE_REV:
+        return SWE_REV[low]
+    return t
+
+
+def opposite_gender(term: str, translation: str = "", term_alts: list[str] | None = None) -> tuple[str, str, str] | None:
+    """Returns (opposite_spanish, target_gender, swedish_hint) or None."""
+    term_clean = term.strip()
+    words = term_clean.split()
+    if not words:
+        return None
+
+    alts = term_alts or []
+    for alt in alts:
+        alt_words = alt.strip().split()
+        if len(words) == 2 and len(alt_words) == 2:
+            if words[0].lower() in ARTICLE_M2F and alt_words[0].lower() in ARTICLE_F2M:
+                return alt, "femininum", _swedish_target(translation, "femininum")
+            if words[0].lower() in ARTICLE_F2M and alt_words[0].lower() in ARTICLE_M2F:
+                return alt, "maskulinum", _swedish_target(translation, "maskulinum")
+        elif len(words) == 1 and len(alt_words) == 1:
+            if words[0].lower().endswith("o") and alt_words[0].lower().endswith("a"):
+                return alt, "femininum", _swedish_target(translation, "femininum")
+            if words[0].lower().endswith("a") and alt_words[0].lower().endswith("o"):
+                return alt, "maskulinum", _swedish_target(translation, "maskulinum")
+
+    if len(words) == 2 and words[0].lower() in ARTICLE_M2F:
+        w = words[1].lower()
+        if w in ALL_M2F:
+            return f"{ARTICLE_M2F[words[0].lower()]} {ALL_M2F[w]}", "femininum", _swedish_target(translation, "femininum")
+    elif len(words) == 2 and words[0].lower() in ARTICLE_F2M:
+        w = words[1].lower()
+        if w in ALL_F2M:
+            return f"{ARTICLE_F2M[words[0].lower()]} {ALL_F2M[w]}", "maskulinum", _swedish_target(translation, "maskulinum")
+    elif len(words) == 1:
+        w = words[0].lower()
+        if w in ALL_M2F:
+            return ALL_M2F[w], "femininum", _swedish_target(translation, "femininum")
+        elif w in ALL_F2M:
+            return ALL_F2M[w], "maskulinum", _swedish_target(translation, "maskulinum")
+
+    return None
 
 
 def parse_word_list(text: str) -> list[WordPair]:
@@ -123,6 +294,14 @@ def check_answer(answer: str, expected: list[str], language: str | None, strict_
             if language == "sv":
                 return CheckResult(Verdict.CORRECT, expected=form)
             return CheckResult(Verdict.ALMOST, "article", form)
+        # In Spanish, answering with the opposite gender is wrong, not a typo.
+        if language == "es":
+            opp = opposite_gender(form)
+            if opp:
+                opp_bare, _ = drop_article(strip_accents(opp[0]), language)
+                if normalize(given_bare) == normalize(opp_bare):
+                    best = CheckResult(Verdict.WRONG, "gender", form)
+                    continue
         # Small typo: one letter for short words, two for longer ones.
         allowed = 1 if len(target_bare) <= 6 else 2
         if len(target_bare) >= 4 and edit_distance(given_bare, target_bare) <= allowed:
